@@ -1,0 +1,487 @@
+{
+  "q1_within_well_std": {
+    "ANCC": {
+      "n_wells": 766,
+      "median_std_ft": 0.006544670069260265,
+      "p95_std_ft": 0.007173919774750649,
+      "p99_std_ft": 0.007468771794005167,
+      "max_std_ft": 0.0087229060341191,
+      "mean_std_ft": 0.006569718355881725
+    },
+    "ASTNU": {
+      "n_wells": 773,
+      "median_std_ft": 0.006544042134321799,
+      "p95_std_ft": 0.007175673235364834,
+      "p99_std_ft": 0.00754812023649408,
+      "max_std_ft": 0.008892277388444112,
+      "mean_std_ft": 0.006570318491425817
+    },
+    "ASTNL": {
+      "n_wells": 773,
+      "median_std_ft": 0.006544338040418435,
+      "p95_std_ft": 0.007172125019045584,
+      "p99_std_ft": 0.007584569671877817,
+      "max_std_ft": 0.008892989297769003,
+      "mean_std_ft": 0.0065711909894157145
+    },
+    "EGFDU": {
+      "n_wells": 773,
+      "median_std_ft": 0.006542922480841871,
+      "p95_std_ft": 0.007161399512205077,
+      "p99_std_ft": 0.007513392194587442,
+      "max_std_ft": 0.008880230039914797,
+      "mean_std_ft": 0.006567245098036571
+    },
+    "EGFDL": {
+      "n_wells": 772,
+      "median_std_ft": 0.006543984332691077,
+      "p95_std_ft": 0.007160592999990937,
+      "p99_std_ft": 0.007507526744726104,
+      "max_std_ft": 0.008848924133586277,
+      "mean_std_ft": 0.006570598694965936
+    },
+    "BUDA": {
+      "n_wells": 773,
+      "median_std_ft": 0.006542207347801194,
+      "p95_std_ft": 0.007171318212429927,
+      "p99_std_ft": 0.0074816057334741795,
+      "max_std_ft": 0.008798814560774826,
+      "mean_std_ft": 0.006568099705843069
+    }
+  },
+  "q2_spatial_smoothness": {
+    "ANCC": {
+      "0-1mi": {
+        "n_pairs": 5037,
+        "median_abs_dF_ft": 56.534999999999854,
+        "mean_abs_dF_ft": 71.72443815763353,
+        "p95_abs_dF_ft": 193.32799999999912
+      },
+      "1-2mi": {
+        "n_pairs": 11682,
+        "median_abs_dF_ft": 183.77250000000004,
+        "mean_abs_dF_ft": 196.701845574388,
+        "p95_abs_dF_ft": 425.4027500000006
+      },
+      "2-5mi": {
+        "n_pairs": 50539,
+        "median_abs_dF_ft": 445.8199999999997,
+        "mean_abs_dF_ft": 472.9092753121352,
+        "p95_abs_dF_ft": 1012.880000000001
+      },
+      "5-10mi": {
+        "n_pairs": 69858,
+        "median_abs_dF_ft": 784.0325000000012,
+        "mean_abs_dF_ft": 817.1087243408057,
+        "p95_abs_dF_ft": 1728.1199999999988
+      },
+      "10-20mi": {
+        "n_pairs": 75203,
+        "median_abs_dF_ft": 724.75,
+        "mean_abs_dF_ft": 799.9109028895124,
+        "p95_abs_dF_ft": 1854.8165000000013
+      }
+    },
+    "ASTNU": {
+      "0-1mi": {
+        "n_pairs": 5093,
+        "median_abs_dF_ft": 57.13500000000022,
+        "mean_abs_dF_ft": 72.91325250343608,
+        "p95_abs_dF_ft": 196.79999999999924
+      },
+      "1-2mi": {
+        "n_pairs": 11717,
+        "median_abs_dF_ft": 186.72500000000036,
+        "mean_abs_dF_ft": 200.04048945975933,
+        "p95_abs_dF_ft": 436.4639999999999
+      },
+      "2-5mi": {
+        "n_pairs": 51094,
+        "median_abs_dF_ft": 454.60249999999905,
+        "mean_abs_dF_ft": 481.25295132500884,
+        "p95_abs_dF_ft": 1030.9237500000002
+      },
+      "5-10mi": {
+        "n_pairs": 71853,
+        "median_abs_dF_ft": 809.6399999999994,
+        "mean_abs_dF_ft": 842.3650879573574,
+        "p95_abs_dF_ft": 1766.3629999999998
+      },
+      "10-20mi": {
+        "n_pairs": 76144,
+        "median_abs_dF_ft": 726.2649999999994,
+        "mean_abs_dF_ft": 812.3683106351125,
+        "p95_abs_dF_ft": 1884.3875
+      }
+    },
+    "ASTNL": {
+      "0-1mi": {
+        "n_pairs": 5093,
+        "median_abs_dF_ft": 57.44000000000051,
+        "mean_abs_dF_ft": 72.12652562340463,
+        "p95_abs_dF_ft": 193.00399999999937
+      },
+      "1-2mi": {
+        "n_pairs": 11717,
+        "median_abs_dF_ft": 184.22500000000036,
+        "mean_abs_dF_ft": 197.0560587181019,
+        "p95_abs_dF_ft": 428.5109999999992
+      },
+      "2-5mi": {
+        "n_pairs": 51094,
+        "median_abs_dF_ft": 443.3124999999991,
+        "mean_abs_dF_ft": 470.3673384350413,
+        "p95_abs_dF_ft": 1008.2544999999993
+      },
+      "5-10mi": {
+        "n_pairs": 71853,
+        "median_abs_dF_ft": 786.4899999999998,
+        "mean_abs_dF_ft": 817.5691663535274,
+        "p95_abs_dF_ft": 1723.1520000000012
+      },
+      "10-20mi": {
+        "n_pairs": 76144,
+        "median_abs_dF_ft": 708.142499999999,
+        "mean_abs_dF_ft": 790.4453721238705,
+        "p95_abs_dF_ft": 1847.8139999999994
+      }
+    },
+    "EGFDU": {
+      "0-1mi": {
+        "n_pairs": 5093,
+        "median_abs_dF_ft": 55.20000000000073,
+        "mean_abs_dF_ft": 71.1257461221284,
+        "p95_abs_dF_ft": 189.6319999999996
+      },
+      "1-2mi": {
+        "n_pairs": 11717,
+        "median_abs_dF_ft": 179.74499999999898,
+        "mean_abs_dF_ft": 192.99652214730733,
+        "p95_abs_dF_ft": 418.73600000000044
+      },
+      "2-5mi": {
+        "n_pairs": 51094,
+        "median_abs_dF_ft": 427.02999999999975,
+        "mean_abs_dF_ft": 457.65506077034485,
+        "p95_abs_dF_ft": 999.1105000000017
+      },
+      "5-10mi": {
+        "n_pairs": 71853,
+        "median_abs_dF_ft": 761.1900000000005,
+        "mean_abs_dF_ft": 791.8348407164627,
+        "p95_abs_dF_ft": 1661.4639999999993
+      },
+      "10-20mi": {
+        "n_pairs": 76144,
+        "median_abs_dF_ft": 713.0599999999986,
+        "mean_abs_dF_ft": 785.0414644620718,
+        "p95_abs_dF_ft": 1809.5569999999996
+      }
+    },
+    "EGFDL": {
+      "0-1mi": {
+        "n_pairs": 5084,
+        "median_abs_dF_ft": 55.1899999999996,
+        "mean_abs_dF_ft": 70.67178304484658,
+        "p95_abs_dF_ft": 189.2944999999996
+      },
+      "1-2mi": {
+        "n_pairs": 11693,
+        "median_abs_dF_ft": 178.97499999999854,
+        "mean_abs_dF_ft": 192.2920486615924,
+        "p95_abs_dF_ft": 416.6259999999991
+      },
+      "2-5mi": {
+        "n_pairs": 50936,
+        "median_abs_dF_ft": 425.39750000000004,
+        "mean_abs_dF_ft": 455.35816495209673,
+        "p95_abs_dF_ft": 997.1737500000004
+      },
+      "5-10mi": {
+        "n_pairs": 71548,
+        "median_abs_dF_ft": 757.5649999999996,
+        "mean_abs_dF_ft": 788.1517580505395,
+        "p95_abs_dF_ft": 1655.3629999999998
+      },
+      "10-20mi": {
+        "n_pairs": 75958,
+        "median_abs_dF_ft": 714.8750000000009,
+        "mean_abs_dF_ft": 784.2307454777641,
+        "p95_abs_dF_ft": 1810.4537500000006
+      }
+    },
+    "BUDA": {
+      "0-1mi": {
+        "n_pairs": 5093,
+        "median_abs_dF_ft": 55.94000000000051,
+        "mean_abs_dF_ft": 71.65566463773808,
+        "p95_abs_dF_ft": 190.84599999999952
+      },
+      "1-2mi": {
+        "n_pairs": 11717,
+        "median_abs_dF_ft": 182.51499999999942,
+        "mean_abs_dF_ft": 196.45574507126398,
+        "p95_abs_dF_ft": 427.21300000000076
+      },
+      "2-5mi": {
+        "n_pairs": 51094,
+        "median_abs_dF_ft": 438.34000000000015,
+        "mean_abs_dF_ft": 468.36905448780675,
+        "p95_abs_dF_ft": 1021.9392500000001
+      },
+      "5-10mi": {
+        "n_pairs": 71853,
+        "median_abs_dF_ft": 781.5900000000001,
+        "mean_abs_dF_ft": 812.2751539949619,
+        "p95_abs_dF_ft": 1707.303999999999
+      },
+      "10-20mi": {
+        "n_pairs": 76144,
+        "median_abs_dF_ft": 729.5824999999995,
+        "mean_abs_dF_ft": 801.522206477201,
+        "p95_abs_dF_ft": 1861.5429999999994
+      }
+    }
+  },
+  "q3_coverage": {
+    "ANCC": {
+      "frac_rows_finite": 0.9910385477553657,
+      "n_rows_finite": 5046621,
+      "n_wells_with_any_F": 766,
+      "n_wells_with_F_complete": 766
+    },
+    "ASTNU": {
+      "frac_rows_finite": 1.0,
+      "n_rows_finite": 5092255,
+      "n_wells_with_any_F": 773,
+      "n_wells_with_F_complete": 773
+    },
+    "ASTNL": {
+      "frac_rows_finite": 1.0,
+      "n_rows_finite": 5092255,
+      "n_wells_with_any_F": 773,
+      "n_wells_with_F_complete": 773
+    },
+    "EGFDU": {
+      "frac_rows_finite": 1.0,
+      "n_rows_finite": 5092255,
+      "n_wells_with_any_F": 773,
+      "n_wells_with_F_complete": 773
+    },
+    "EGFDL": {
+      "frac_rows_finite": 0.9988085828380551,
+      "n_rows_finite": 5086188,
+      "n_wells_with_any_F": 772,
+      "n_wells_with_F_complete": 772
+    },
+    "BUDA": {
+      "frac_rows_finite": 1.0,
+      "n_rows_finite": 5092255,
+      "n_wells_with_any_F": 773,
+      "n_wells_with_F_complete": 773
+    },
+    "_meta": {
+      "n_wells_total": 773,
+      "n_total_rows": 5092255
+    },
+    "missing_patterns": {
+      "<none missing>": 765,
+      "ANCC": 7,
+      "EGFDL": 1
+    }
+  },
+  "q4_cross_formation_corr": {
+    "ANCC__ASTNU": {
+      "n_wells": 765,
+      "median_corr": 0.9448372738859067,
+      "mean_corr": 0.8968535238065809,
+      "p05_corr": 0.7061487922447223,
+      "p95_corr": 1.0
+    },
+    "ANCC__ASTNL": {
+      "n_wells": 765,
+      "median_corr": 0.8729534369854446,
+      "mean_corr": 0.8860610730416435,
+      "p05_corr": 0.7028283329419032,
+      "p95_corr": 1.0
+    },
+    "ANCC__EGFDU": {
+      "n_wells": 765,
+      "median_corr": 0.8126110504903882,
+      "mean_corr": 0.835883248072008,
+      "p05_corr": 0.6933686938835211,
+      "p95_corr": 1.0
+    },
+    "ANCC__EGFDL": {
+      "n_wells": 765,
+      "median_corr": 0.7991016045169901,
+      "mean_corr": 0.8392352135311537,
+      "p05_corr": 0.6951936645937831,
+      "p95_corr": 1.0
+    },
+    "ANCC__BUDA": {
+      "n_wells": 765,
+      "median_corr": 0.8888417257994772,
+      "mean_corr": 0.8670639637395563,
+      "p05_corr": 0.7051102315023544,
+      "p95_corr": 1.0
+    },
+    "ASTNU__ASTNL": {
+      "n_wells": 765,
+      "median_corr": 0.9277468173036779,
+      "mean_corr": 0.8957250153413212,
+      "p05_corr": 0.7111477932925402,
+      "p95_corr": 1.0
+    },
+    "ASTNU__EGFDU": {
+      "n_wells": 765,
+      "median_corr": 0.8221366135275694,
+      "mean_corr": 0.8465027645018212,
+      "p05_corr": 0.6993937516679886,
+      "p95_corr": 1.0
+    },
+    "ASTNU__EGFDL": {
+      "n_wells": 765,
+      "median_corr": 0.8547691436116265,
+      "mean_corr": 0.8605391818411856,
+      "p05_corr": 0.6978697196845661,
+      "p95_corr": 1.0
+    },
+    "ASTNU__BUDA": {
+      "n_wells": 765,
+      "median_corr": 0.8381710248018938,
+      "mean_corr": 0.8587113825174413,
+      "p05_corr": 0.696194308878391,
+      "p95_corr": 1.0
+    },
+    "ASTNL__EGFDU": {
+      "n_wells": 765,
+      "median_corr": 0.8124321234485735,
+      "mean_corr": 0.8368721814889388,
+      "p05_corr": 0.6967884244729897,
+      "p95_corr": 1.0
+    },
+    "ASTNL__EGFDL": {
+      "n_wells": 765,
+      "median_corr": 0.8721274302463963,
+      "mean_corr": 0.8630389502335543,
+      "p05_corr": 0.6924910626006108,
+      "p95_corr": 1.0
+    },
+    "ASTNL__BUDA": {
+      "n_wells": 765,
+      "median_corr": 0.8722117083340627,
+      "mean_corr": 0.8749930863083769,
+      "p05_corr": 0.7012028827125532,
+      "p95_corr": 1.0
+    },
+    "EGFDU__EGFDL": {
+      "n_wells": 765,
+      "median_corr": 0.7820577787114003,
+      "mean_corr": 0.82499416271079,
+      "p05_corr": 0.6866011771679513,
+      "p95_corr": 1.0
+    },
+    "EGFDU__BUDA": {
+      "n_wells": 765,
+      "median_corr": 0.8040439099282395,
+      "mean_corr": 0.8290550347317002,
+      "p05_corr": 0.6861222900743676,
+      "p95_corr": 1.0
+    },
+    "EGFDL__BUDA": {
+      "n_wells": 765,
+      "median_corr": 0.8144795013741618,
+      "mean_corr": 0.8400696709764135,
+      "p05_corr": 0.6977454537835039,
+      "p95_corr": 1.0
+    }
+  },
+  "q5_ensemble_recommendation": {
+    "ranked_singles_by_median_std_ft": [
+      {
+        "F": "BUDA",
+        "median_std_ft": 0.006542207347801194
+      },
+      {
+        "F": "EGFDU",
+        "median_std_ft": 0.006542922480841871
+      },
+      {
+        "F": "EGFDL",
+        "median_std_ft": 0.006543984332691077
+      },
+      {
+        "F": "ASTNU",
+        "median_std_ft": 0.006544042134321799
+      },
+      {
+        "F": "ASTNL",
+        "median_std_ft": 0.006544338040418435
+      },
+      {
+        "F": "ANCC",
+        "median_std_ft": 0.006544670069260265
+      }
+    ],
+    "best_ensemble_per_K": [
+      {
+        "K": 1,
+        "formations": [
+          "BUDA"
+        ],
+        "predicted_std_ft": 0.006542207347801194
+      },
+      {
+        "K": 2,
+        "formations": [
+          "EGFDU",
+          "EGFDL"
+        ],
+        "predicted_std_ft": 0.006176648781942269
+      },
+      {
+        "K": 3,
+        "formations": [
+          "ANCC",
+          "EGFDU",
+          "EGFDL"
+        ],
+        "predicted_std_ft": 0.006087135211476549
+      },
+      {
+        "K": 4,
+        "formations": [
+          "ANCC",
+          "EGFDU",
+          "EGFDL",
+          "BUDA"
+        ],
+        "predicted_std_ft": 0.006077455072878685
+      },
+      {
+        "K": 5,
+        "formations": [
+          "ANCC",
+          "ASTNL",
+          "EGFDU",
+          "EGFDL",
+          "BUDA"
+        ],
+        "predicted_std_ft": 0.0060910920965693985
+      },
+      {
+        "K": 6,
+        "formations": [
+          "ANCC",
+          "ASTNU",
+          "ASTNL",
+          "EGFDU",
+          "EGFDL",
+          "BUDA"
+        ],
+        "predicted_std_ft": 0.006114956056931736
+      }
+    ]
+  }
+}
