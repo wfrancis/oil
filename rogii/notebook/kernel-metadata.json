@@ -1,6 +1,6 @@
 {
   "id": "wbfranci/rogii-eagle-ford-dtw-rts-v1",
-  "title": "ROGII Eagle Ford DTW RTS v1",
+  "title": "ROGII v9 — formation-surface stack (KNN + MLP + GBM)",
   "code_file": "submission.ipynb",
   "language": "python",
   "kernel_type": "notebook",
