@@ -11,10 +11,10 @@ below — three were dead ends, one is the next big lever.
 | **PNG vision encoder** | DEAD | n/a | Hidden test ships no PNGs. |
 | **Pad-sister retrieval** | DEAD as primary | 34.93 | Same-pad laterals share prefix anchors but diverge in eval (operator independence). |
 | **Particle-filter geosteering** | DEAD as primary | 56.7 (PF only) / 18.79 (PF + prior) | GR-only likelihood drifts; with the formula prior PF just smooths it slightly worse. |
-| **Neural ANCC field** | LIVE — v9 lever | ANCC RMSE 58 ft vs KNN 150 ft on 60-well subset | Global MLP beats local KNN by ~60% at the ANCC step. |
+| **Neural ANCC field** | LIVE — v9 lever | ANCC RMSE 23.5 vs KNN 30.7 (full 765-well 5-fold OOF). Catastrophic-tail wells (RMSE>60ft): 11 vs 46 (4× drop). | MLP+PE wins on the outlier tail; KNN wins on the typical median. STACK, don't replace. |
 
-v8 OOF baseline: **12.03**. Top of LB: 11.247. The neural-ANCC path is the
-candidate to push us toward 11.
+v8 OOF baseline: **12.03**. Top of LB: 11.247. The neural-ANCC stack is
+the candidate to push us toward 11.
 
 ## Path 1: PNG vision encoder — DEAD
 
@@ -104,43 +104,79 @@ Reusable: PF posterior std could be a useful uncertainty feature for the
 GBM, but v8 already has neighbour-distance and KNN-std features that
 serve the same role.
 
-## Path 4: Neural ANCC field — LIVE
+## Path 4: Neural ANCC field — LIVE (full results)
 
 `rogii/src/neural_ancc.py`, `rogii/bench/neural_ancc_score.py`,
 `rogii/bench/neural_ancc_results.json`.
 
 Hypothesis: konbu17's row-level KNN and per-well plane fit are LOCAL
-estimators. They fail wherever neighbours are sparse, producing the
-catastrophic-outlier wells (max well RMSE 56 ft in v8 OOF). A small
-MLP fit to all (X, Y) → ANCC tuples learns a smooth GLOBAL surface that
-generalises better off-grid.
+estimators. They fail wherever neighbours are sparse, producing
+catastrophic well-RMSE outliers. A small MLP with sinusoidal positional
+encoding (NeRF-style) on (X, Y) learns a *global* smooth-surface
+representation.
 
-Result on 60-well subset, GroupKFold(5), self-well excluded, 4 epochs,
-386k rows / epoch:
+**Full 5-fold GroupKFold OOF over 765 wells / 5,040,554 rows:**
 
 ```
-                  fold ANCC RMSE                 mean      median TVT
-                  ------------------             ANCC      across folds
-  KNN baseline    [207.6, 166.6, 109.6, 119.7, 145.2]   149.7   55.5
-  MLP (no PE)     [44.85, 54.75, 60.50, 85.01, 46.10]    58.2   18.4
-  MLP + PE L=8    [398.91, 240.5, 130.8, 246.6, 119.7]  227.3   72.1
+variant              ANCC pool   TVT med   TVT p90   TVT max   wells>60ft
+KNN (K=20, IDW)         30.74     12.30     42.58    300.85       46
+MLP no_PE               45.53     22.06     49.16     99.54       45
+MLP + PE L=8            23.52     15.19     33.25    142.79       13
+MLP + PE L=16           25.65     17.73     35.89    115.00       14
+MLP + PE L=8 multi      24.10     14.67     32.19    165.66       11
+MLP + PE L=8 ens(3)     23.27     14.32     31.89    147.61       11
 ```
 
-**MLP-no-PE beats KNN by ~60% on ANCC RMSE.** Positional encoding
-*hurts* — high-frequency oscillations confuse the smooth-surface
-estimation in this regime.
+Per-fold TVT max well RMSE (the load-bearing stat):
 
-Caveats:
-  * KNN baseline here is the agent's re-implementation, not konbu17's
-    full setup; with all 773 wells konbu17's KNN does much better
-    (v8 OOF 12.03 in absolute TVT).
-  * MLP trained on only 386k rows and 4 epochs. Full 5M rows + more
-    epochs should improve.
-  * No GBM correction on top of the MLP yet.
+```
+fold   KNN     MLP+PE-L8   MLP+PE-L8 multi
+ 0     87.8     97.7         98.6
+ 1    110.4     51.5         49.9
+ 2    300.9     68.9         57.7  <-- collapses by 80%
+ 3    132.4    107.4        106.8
+ 4    162.8    142.8        165.7
+```
 
-The right v9 experiment: **swap RowKNN.impute → neural-ANCC.predict in
-the v8 feature builder**, retrain the GBM stack on top, see whether OOF
-moves below 12.03. If yes, ship as v9.
+**Findings:**
+
+1. **PE matters.** No-PE MLP is uniformly worse than KNN (45.5 vs 30.7
+   pooled ANCC). With L=8 PE, MLP beats KNN on ANCC by 23%.
+2. **MLP fixes the catastrophic tail.** On KNN's top-10 worst wells
+   (TVT RMSE 114–301 ft), MLP wins on every one of them, with
+   improvements of −20 to **−250 ft**. The 301-ft fold-2 outlier
+   collapses to 58 ft.
+3. **MLP loses on the already-easy wells.** On 454/765 wells KNN has
+   lower TVT RMSE (median 14.3 ft for KNN-easy wells; MLP is ~3–4 ft
+   worse). KNN's local interpolation of dense neighbours is genuinely
+   sharper than a 256-hidden MLP for the typical well. This is the
+   median gap (12.30 vs 14.67).
+4. **Catastrophic-well count drops 4×.** Wells with TVT RMSE > 60 ft go
+   from 46 (KNN) to 11 (MLP multi). Wells > 30 ft from 133 to 99.
+5. **L=8 ≥ L=16.** L=16 gives marginally worse pooled ANCC and TVT;
+   extra high-freq channels add overfitting risk.
+6. **Multi-output (all 6 formations) is best on outlier-control,**
+   marginally beating ANCC-only on TVT p90/max/wells>60ft because the
+   shared trunk regularizes.
+7. **3-seed ensemble: marginal.** Pooled ANCC 23.27 vs 23.52; TVT max
+   *increases*. Not worth 3× compute.
+8. **Wall-time on M1 Pro MPS:** ~10–12 s fit + <1 s inference per fold.
+   End-to-end 5-fold OOF: ~3 min. On Kaggle T4 GPU: faster.
+
+**The right play: STACK, not replace.** KNN dominates on ~60% of wells
+(dense-neighbour case); MLP dominates on the catastrophic-outlier tail.
+Two practical paths:
+
+  - **Cheap:** add `mlp_ancc_pred` and `mlp_tvt_formula = -Z + mlp_ancc
+    + b_prefix_median` as features in v8's LGB stack. The GBM learns
+    the gate from `knn_row_dist` itself.
+  - **Cleaner:** distance-aware blend at inference,
+      `tvt = w_knn · tvt_knn + (1 − w_knn) · tvt_mlp`,
+      `w_knn = exp(−knn_row_dist / τ)`,
+    calibrate τ on OOF.
+
+The cheap path is what v9 should ship. v8's GBM already exposes
+`knn_row_dist`; adding two MLP-derived features is mechanical.
 
 ## What this leaves
 

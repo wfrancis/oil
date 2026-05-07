@@ -39,6 +39,73 @@ ROW_NQ_DEFAULT = 12_000
 
 
 # ---------------------------------------------------------------------------
+# MLP imputer (v9 lever)
+# ---------------------------------------------------------------------------
+
+class MLPAnccImputer:
+    """Wraps a multi-output ANCC field MLP behind a (X, Y) -> (N, F) API.
+
+    Training once on the union of train wells produces a global smooth
+    surface that complements konbu17's row-level KNN. In the v9 GBM stack
+    we pass BOTH KNN and MLP predictions as features and let the boosted
+    trees learn the gate (KNN dominates dense-neighbor wells; MLP
+    dominates the sparse-neighbour catastrophic-outlier tail).
+
+    For local OOF this needs per-fold retraining (self-well exclusion)
+    since the MLP doesn't have a natural neighbor-exclusion mechanism
+    like KNN does. For the Kaggle submission path test wells are not in
+    train, so a single fit on all train rows suffices.
+    """
+
+    def __init__(self, ancc_net, formations: tuple[str, ...] = FORMATIONS):
+        self.net = ancc_net
+        self.formations = formations
+
+    @classmethod
+    def fit(
+        cls,
+        train_paths,
+        *,
+        formations: tuple[str, ...] = FORMATIONS,
+        exclude_wids: set[str] | None = None,
+        num_freqs: int = 8,
+        hidden: int = 256,
+        epochs: int = 12,
+        rows_per_epoch: int = 500_000,
+        seed: int = 42,
+        device: str | None = None,
+        verbose: bool = False,
+    ) -> "MLPAnccImputer":
+        # Lazy import: torch isn't required for v8 path.
+        from neural_ancc import AnccNet, TrainConfig, load_train_rows
+
+        if exclude_wids:
+            train_paths = [p for p in train_paths
+                           if p.stem.replace("__horizontal_well", "") not in exclude_wids]
+
+        xy, targets, _wids = load_train_rows(
+            train_dir=None, formations=formations, paths=train_paths,
+        )
+        cfg = TrainConfig(
+            num_freqs=num_freqs,
+            hidden=hidden,
+            out_dim=len(formations),
+            rows_per_epoch=rows_per_epoch,
+            epochs=epochs,
+            seed=seed,
+        )
+        if device is not None:
+            cfg.device = device
+        net = AnccNet(cfg)
+        net.fit(xy, targets, verbose=verbose)
+        return cls(ancc_net=net, formations=tuple(formations))
+
+    def impute(self, xy_q: np.ndarray) -> np.ndarray:
+        """Predict (M, F) formation values at each (X, Y) query."""
+        return self.net.predict(xy_q)
+
+
+# ---------------------------------------------------------------------------
 # Robust statistics
 # ---------------------------------------------------------------------------
 
@@ -336,6 +403,7 @@ def build_hidden_features(
     is_train: bool,
     formation_imputer: FormationPlaneKNN,
     row_imputer: RowKNN,
+    mlp_imputer: "MLPAnccImputer | None" = None,
     primary_formation: str = "ANCC",
     formations: tuple[str, ...] = FORMATIONS,
     enable_beam: bool = True,
@@ -588,6 +656,49 @@ def build_hidden_features(
         tvt_formula_plane_primary - tvt_formula_row_primary
     ).astype(np.float32)
 
+    # ------------------------------------------------------------------
+    # v9: MLP global ANCC field features (optional). The 5-fold OOF on
+    # 765 wells / 5M rows showed MLP+PE-L8 multi-output reduces
+    # catastrophic-tail wells (RMSE>60ft) from 46 (KNN) to 11 while
+    # losing slightly on the typical median. We expose both KNN and MLP
+    # predictions and let the GBM gate by knn_row_dist.
+    # ------------------------------------------------------------------
+    if mlp_imputer is not None:
+        mlp_preds_full = mlp_imputer.impute(xy_full)            # (N, F)
+        mlp_preds_post = mlp_preds_full[mask_start:]
+        b_mlp_per_F: dict[str, float] = {}
+        b_mlp_huber_per_F: dict[str, float] = {}
+        for fi, fname in enumerate(formations):
+            per_row = known_tvt + known_z - mlp_preds_full[:mask_start, fi]
+            b_mlp_per_F[fname] = median_b(per_row)
+            b_mlp_huber_per_F[fname] = huber_b(per_row)
+        # Per-formation MLP features
+        for fi, fname in enumerate(formations):
+            feats[f"mlp_{fname}"] = mlp_preds_post[:, fi].astype(np.float32)
+            feats[f"mlp_{fname}_dz"] = (z_post - mlp_preds_post[:, fi]).astype(np.float32)
+            feats[f"mlp_b_{fname}"] = np.float32(b_mlp_per_F[fname])
+            feats[f"mlp_b_huber_{fname}"] = np.float32(b_mlp_huber_per_F[fname])
+            tvt_F_mlp = -z_post + mlp_preds_post[:, fi] + b_mlp_per_F[fname]
+            feats[f"mlp_tvt_formula_{fname}"] = (
+                tvt_F_mlp - np.float32(last_known_tvt)
+            ).astype(np.float32)
+        # Primary-formation deltas + KNN-vs-MLP disagreement (gate inputs)
+        tvt_formula_mlp_primary = (
+            -z_post + mlp_preds_post[:, f_idx_primary] + b_mlp_per_F[primary_formation]
+        )
+        feats["mlp_tvt_formula"] = (
+            tvt_formula_mlp_primary - np.float32(last_known_tvt)
+        ).astype(np.float32)
+        feats["mlp_vs_row_primary_diff"] = (
+            mlp_preds_post[:, f_idx_primary] - row_preds_post[:, f_idx_primary]
+        ).astype(np.float32)
+        feats["mlp_vs_row_primary_tvt_diff"] = (
+            tvt_formula_mlp_primary - tvt_formula_row_primary
+        ).astype(np.float32)
+        feats["mlp_vs_plane_primary_diff"] = (
+            mlp_preds_post[:, f_idx_primary] - plane_post[:, f_idx_primary]
+        ).astype(np.float32)
+
     if is_train:
         feats["target"] = (hidden["TVT"].to_numpy(dtype=np.float32)
                            - np.float32(last_known_tvt)).astype(np.float32)
@@ -600,6 +711,7 @@ def build_dataset(
     row_imputer: RowKNN,
     *,
     is_train: bool,
+    mlp_imputer: "MLPAnccImputer | None" = None,
     primary_formation: str = "ANCC",
     formations: tuple[str, ...] = FORMATIONS,
     enable_beam: bool = True,
@@ -621,6 +733,7 @@ def build_dataset(
             is_train=is_train,
             formation_imputer=formation_imputer,
             row_imputer=row_imputer,
+            mlp_imputer=mlp_imputer,
             primary_formation=primary_formation,
             formations=formations,
             enable_beam=enable_beam,

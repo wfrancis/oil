@@ -186,15 +186,16 @@ def per_well_metrics(
 
 
 # ---------------------------------------------------------------------------
-# Variant runners
+# Variant config helper
 # ---------------------------------------------------------------------------
 
-def make_cfg(num_freqs: int, out_dim: int, epochs: int, seed: int = 42) -> TrainConfig:
+def make_cfg(num_freqs: int, out_dim: int, epochs: int, rows_per_epoch: int,
+             seed: int = 42) -> TrainConfig:
     return TrainConfig(
         num_freqs=num_freqs,
         hidden=256,
         out_dim=out_dim,
-        rows_per_epoch=500_000,
+        rows_per_epoch=rows_per_epoch,
         batch_size=4096,
         epochs=epochs,
         lr=1e-3,
@@ -203,107 +204,9 @@ def make_cfg(num_freqs: int, out_dim: int, epochs: int, seed: int = 42) -> Train
     )
 
 
-def run_mlp_variant(
-    name: str,
-    cfg: TrainConfig,
-    xy_all: np.ndarray,
-    targets_all: np.ndarray,
-    wids_all: np.ndarray,
-    val_well_set: set[str],
-    *,
-    f_idx_ancc: int,
-    multi_output: bool,
-    verbose: bool = False,
-) -> tuple[np.ndarray, dict]:
-    """Train one MLP variant on the train fold (rows whose well NOT in
-    val_well_set) and predict ANCC at every row of every held-out well.
-    Returns the ANCC prediction array for the held-out rows in their original
-    order plus diagnostics.
-    """
-    val_mask = np.array([w in val_well_set for w in wids_all])
-    train_mask = ~val_mask
-    if multi_output:
-        t_train = targets_all[train_mask]
-    else:
-        t_train = targets_all[train_mask, f_idx_ancc:f_idx_ancc + 1]
-
-    net = AnccNet(cfg)
-    t0 = time.perf_counter()
-    hist = net.fit(xy_all[train_mask], t_train, verbose=verbose)
-    fit_time = time.perf_counter() - t0
-
-    t0 = time.perf_counter()
-    pred = net.predict(xy_all[val_mask])
-    pred_time = time.perf_counter() - t0
-
-    if multi_output:
-        ancc_pred = pred[:, f_idx_ancc]
-    else:
-        ancc_pred = pred[:, 0]
-
-    # ANCC pooled RMSE on held-out segment
-    ancc_truth = targets_all[val_mask, f_idx_ancc]
-    rmse_pooled = float(np.sqrt(np.mean((ancc_pred - ancc_truth) ** 2)))
-    diag = {
-        "name": name,
-        "fit_time_s": fit_time,
-        "pred_time_s": pred_time,
-        "epoch_loss": hist["epoch_loss"],
-        "ancc_rmse_pooled_held_out": rmse_pooled,
-    }
-    return ancc_pred, val_mask, diag
-
-
-def run_knn_variant(
-    xy_all: np.ndarray,
-    targets_all: np.ndarray,
-    wids_all: np.ndarray,
-    val_well_set: set[str],
-    *,
-    f_idx_ancc: int,
-    k: int = 20,
-) -> tuple[np.ndarray, np.ndarray, dict]:
-    val_mask = np.array([w in val_well_set for w in wids_all])
-    train_mask = ~val_mask
-    t0 = time.perf_counter()
-    pred = knn_predict_ancc(
-        xy_all[train_mask], targets_all[train_mask, f_idx_ancc],
-        xy_all[val_mask], k=k,
-    )
-    elapsed = time.perf_counter() - t0
-    truth = targets_all[val_mask, f_idx_ancc]
-    rmse_pooled = float(np.sqrt(np.mean((pred - truth) ** 2)))
-    return pred, val_mask, {
-        "name": "knn_baseline",
-        "knn_time_s": elapsed,
-        "ancc_rmse_pooled_held_out": rmse_pooled,
-    }
-
-
 # ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
-
-def reorder_pred_to_well_dict(
-    pred: np.ndarray, val_mask: np.ndarray, wids_all: np.ndarray
-) -> dict[str, np.ndarray]:
-    """Group val-row predictions back into per-well arrays preserving row order.
-
-    Important: the per-well arrays here are ONLY the val rows of that well in
-    the order they appeared in `wids_all`, not the per-well full row order.
-    Since `xy_all` rows are stored in the order load_train_rows returns
-    (by-well, within-well in CSV order, matching the per-well arrays we
-    re-load), the indices line up.
-    """
-    wids_val = wids_all[val_mask]
-    out: dict[str, list[int]] = {}
-    pred_per_well: dict[str, list[float]] = {}
-    for i in range(len(pred)):
-        w = wids_val[i]
-        out.setdefault(w, []).append(i)
-        pred_per_well.setdefault(w, []).append(float(pred[i]))
-    return {w: np.array(v, dtype=np.float32) for w, v in pred_per_well.items()}
-
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -433,8 +336,7 @@ def main() -> int:
             )
             out_dim = len(FORMATIONS) if multi else 1
             cfg = make_cfg(num_freqs=num_freqs, out_dim=out_dim, epochs=args.epochs,
-                           seed=42 + fold_idx)
-            cfg.rows_per_epoch = args.rows_per_epoch
+                           rows_per_epoch=args.rows_per_epoch, seed=42 + fold_idx)
 
             t0 = time.perf_counter()
             xy_train = xy_all[tr]
