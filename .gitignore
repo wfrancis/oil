@@ -17,3 +17,7 @@ rogii/data/geology_clf.joblib
 
 # Per-machine state
 rogii/bench/submit_guard_state.json
+
+# Agent intermediate parquet/csv outputs (regenerable; not for git)
+rogii/bench/_*.parquet
+rogii/bench/_*.csv

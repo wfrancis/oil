@@ -7,3 +7,31 @@
   train: 10/50
   train: 15/50
   train: 20/50
+  train: 25/50
+  train: 30/50
+  train: 35/50
+  train: 40/50
+  train: 45/50
+  train: 50/50
+   train shape: (257916, 132), 464.9s
+   saved features to /Users/william/drilling_oil_gas/rogii/bench/_lgb_objectives_features.parquet
+   #features: 129
+
+>> objective=regression
+   fold 0: rmse=26.8596  best_iter=2  walltime=22.5s
+   fold 1: rmse=20.2103  best_iter=245  walltime=69.6s
+   fold 2: rmse=20.4597  best_iter=28  walltime=26.7s
+   fold 3: rmse=20.8059  best_iter=472  walltime=88.7s
+   fold 4: rmse=19.2933  best_iter=7  walltime=27.4s
+   overall_rmse=21.5965  max_well_rmse=50.08  p90_well_rmse=39.73  mean_walltime/fold=47.0s
+
+>> objective=regression_l1
+   fold 0: rmse=26.9986  best_iter=1  walltime=25.7s
+   fold 1: rmse=21.3376  best_iter=212  walltime=53.1s
+   fold 2: rmse=19.4154  best_iter=51  walltime=33.8s
+   fold 3: rmse=23.9324  best_iter=290  walltime=71.1s
+   fold 4: rmse=18.1668  best_iter=42  walltime=35.7s
+   overall_rmse=22.1693  max_well_rmse=57.68  p90_well_rmse=35.66  mean_walltime/fold=43.9s
+
+>> objective=huber
+   fold 0: rmse=26.6226  best_iter=97  walltime=36.6s

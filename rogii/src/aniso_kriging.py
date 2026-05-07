@@ -159,12 +159,14 @@ class AnisoFormationKNN:
         # so "median NN over all rows" is misleadingly small. The relevant
         # scale for held-out queries is the median distance from one well
         # CENTROID to its nearest other well centroid in the rotated frame.
-        # This is on the order of typical well spacing.
-        unique_wids = np.unique(well_ids)
+        # This is on the order of typical well spacing. We compute centroids
+        # via a bincount-based group-mean to avoid an O(N * W) double loop.
+        unique_wids, inv = np.unique(well_ids, return_inverse=True)
         if len(unique_wids) >= 4:
-            centroids = np.array([
-                xy_pre[well_ids == wid].mean(axis=0) for wid in unique_wids
-            ])
+            counts = np.bincount(inv).astype(np.float64)
+            sums_x = np.bincount(inv, weights=xy_pre[:, 0])
+            sums_y = np.bincount(inv, weights=xy_pre[:, 1])
+            centroids = np.column_stack([sums_x / counts, sums_y / counts])
             tree_c = cKDTree(centroids)
             d_c, _ = tree_c.query(centroids, k=2)
             L_norm = float(np.median(d_c[:, 1]))
@@ -225,14 +227,18 @@ class AnisoFormationKNN:
                 c_i = np.where(valid_k, np.exp(-d_k), 0.0)
 
             # Batched kriging system. Build (B, K, K) Gram matrix from neighbor
-            # whitened coords. self.xy is raw, so whitening must be applied.
+            # whitened coords using the squared-norm identity:
+            #   d^2(i,j) = |x_i|^2 + |x_j|^2 - 2 x_i.x_j
+            # to avoid the (B, K, K, 2) intermediate.
             xy_n = self.xy[idx_k] @ self.L                # (B, K, 2)
-            diffs = xy_n[:, :, None, :] - xy_n[:, None, :, :]  # (B, K, K, 2)
-            dn = np.sqrt(np.sum(diffs * diffs, axis=-1))
+            sq_n = (xy_n * xy_n).sum(axis=-1)             # (B, K)
+            dot = np.einsum("bid,bjd->bij", xy_n, xy_n)   # (B, K, K)
+            d2 = sq_n[:, :, None] + sq_n[:, None, :] - 2.0 * dot
+            np.maximum(d2, 0.0, out=d2)
             if kernel == "gaussian":
-                K_mat = np.exp(-0.5 * dn * dn)
+                K_mat = np.exp(-0.5 * d2)
             else:
-                K_mat = np.exp(-dn)
+                K_mat = np.exp(-np.sqrt(d2))
             K_mat = K_mat + self.nugget * np.eye(k)[None, :, :]
 
             # Solve K_mat[i] @ w[i] = c_i[i]  (B systems of size K)
