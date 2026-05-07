@@ -312,18 +312,37 @@ def train_xgb(seed):
         return None, None, None
     logger.info("XGB seed=%d", seed)
     params = dict(XGB_BASE); params["seed"] = seed
+    # XGB doesn't accept inf/-inf. Replace before constructing DMatrix.
+    X_all_train = (
+        train_df[feature_cols]
+        .replace([np.inf, -np.inf], np.nan)
+        .astype(np.float32)
+    )
+    X_all_test = (
+        test_df[feature_cols]
+        .replace([np.inf, -np.inf], np.nan)
+        .astype(np.float32)
+    )
     oof = np.zeros(len(train_df), dtype=np.float32)
     test_pred = np.zeros(len(test_df), dtype=np.float32)
-    for fold, (tr, va) in enumerate(splits):
-        dtr = xgb.DMatrix(train_df.iloc[tr][feature_cols].values, label=train_df.iloc[tr]["target"].values)
-        dva = xgb.DMatrix(train_df.iloc[va][feature_cols].values, label=train_df.iloc[va]["target"].values)
-        m = xgb.train(params, dtr, num_boost_round=5000,
-                      evals=[(dva, "val")], early_stopping_rounds=125, verbose_eval=500)
-        oof[va] = m.predict(dva, iteration_range=(0, m.best_iteration + 1)).astype(np.float32)
-        rmse = float(np.sqrt(np.mean((oof[va] - train_df.iloc[va]["target"].values) ** 2)))
-        logger.info("  fold %d: rmse=%.4f best_iter=%d", fold, rmse, m.best_iteration)
-        dte = xgb.DMatrix(test_df[feature_cols].values)
-        test_pred += m.predict(dte, iteration_range=(0, m.best_iteration + 1)).astype(np.float32) / N_SPLITS
+    try:
+        for fold, (tr, va) in enumerate(splits):
+            dtr = xgb.DMatrix(X_all_train.iloc[tr].values,
+                              label=train_df.iloc[tr]["target"].values,
+                              missing=np.nan)
+            dva = xgb.DMatrix(X_all_train.iloc[va].values,
+                              label=train_df.iloc[va]["target"].values,
+                              missing=np.nan)
+            m = xgb.train(params, dtr, num_boost_round=5000,
+                          evals=[(dva, "val")], early_stopping_rounds=125, verbose_eval=500)
+            oof[va] = m.predict(dva, iteration_range=(0, m.best_iteration + 1)).astype(np.float32)
+            rmse = float(np.sqrt(np.mean((oof[va] - train_df.iloc[va]["target"].values) ** 2)))
+            logger.info("  fold %d: rmse=%.4f best_iter=%d", fold, rmse, m.best_iteration)
+            dte = xgb.DMatrix(X_all_test.values, missing=np.nan)
+            test_pred += m.predict(dte, iteration_range=(0, m.best_iteration + 1)).astype(np.float32) / N_SPLITS
+    except Exception as exc:
+        logger.warning("XGB failed (%s); skipping XGB seed=%d", exc, seed)
+        return None, None, None
     overall = float(np.sqrt(np.mean((oof - train_df["target"].values) ** 2)))
     logger.info("XGB seed=%d: OOF rmse=%.4f", seed, overall)
     return oof, test_pred, overall
