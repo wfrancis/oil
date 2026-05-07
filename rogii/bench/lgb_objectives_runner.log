@@ -1,4 +1,4 @@
->> Subset: 300/773 train wells, seed=42
-   plane fit: 300 wells in 6.3s
-   row KNN fit: 1,982,410 rows in 11.1s
+>> Subset: 150/773 train wells, seed=42
+   plane fit: 149 wells in 2.2s
+   row KNN fit: 986,714 rows in 4.2s
 >> Building train features (KNN + plane, no MLP, no beam) ...

@@ -174,14 +174,16 @@ class AnisoFormationKNN:
         # so kernel argument is O(1) at typical neighbor distance.
         L_pre = R @ np.diag(1.0 / sigma)
         xy_pre = xy @ L_pre
-        # Subsample to estimate median NN distance cheaply
-        n_sub = min(20_000, xy.shape[0])
+        # Estimate the characteristic INTER-CLUSTER (between-track / between-
+        # well) length scale, not intra-well row spacing. We do this by
+        # subsampling sparsely (so within-well dense rows can't dominate)
+        # and taking the median 1-NN distance in that thinned point set.
         rng = np.random.default_rng(20260507)
+        n_sub = min(2_000, xy.shape[0])
         idx_sub = rng.choice(xy.shape[0], n_sub, replace=False)
-        tree_pre = cKDTree(xy_pre)
-        d_pre, _ = tree_pre.query(xy_pre[idx_sub], k=2)
-        # Use median 1-NN distance as the global scale.
-        L_norm = float(np.median(d_pre[:, 1]))
+        tree_thin = cKDTree(xy_pre[idx_sub])
+        d_thin, _ = tree_thin.query(xy_pre[idx_sub], k=2)
+        L_norm = float(np.median(d_thin[:, 1]))
         L_norm = max(L_norm, 1e-9)
 
         # Final whitening: rotate, anisotropy-scale, then divide by overall

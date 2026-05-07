@@ -1,12 +1,12 @@
 {
   "thresholds": {
     "CAT_TVT_THRESHOLD": 60.0,
-    "ISO_DIST_FT": 8000.0,
-    "MOT_TVT_RANGE": 30.0,
-    "FLT_DTVT_PER_MD": 0.5,
-    "ANC_VAR_LAST_100": 5.0,
-    "REG_FRACTION_OOR": 0.1,
-    "TWM_CORR": 0.3,
+    "ISO_DIST_FT": 4000.0,
+    "MOT_TVT_RANGE": 45.0,
+    "FLT_DTVT_PER_MD": 3.0,
+    "ANC_VAR_LAST_100": 2.0,
+    "REG_OFF_ANCHOR_FT": 20.0,
+    "TWM_CORR": 0.5,
     "COV_NULL_FRAC": 0.05
   },
   "top_k": 20,
@@ -52,6 +52,22 @@
       "max": 1.0,
       "mean": 0.3779971884848791
     },
+    "eval_offset_from_anchor": {
+      "p50": 0.8425413634286087,
+      "p90": 15.687098149279702,
+      "p95": 20.43436336418851,
+      "p99": 37.65358877832749,
+      "max": 92.07592188918898,
+      "mean": 1.4261966381870568
+    },
+    "eval_above_pre_max_ft": {
+      "p50": 8.529999999998836,
+      "p90": 28.107999999999446,
+      "p95": 36.571999999999754,
+      "p99": 64.61120000000135,
+      "max": 91.05999999999949,
+      "mean": 10.143163398692783
+    },
     "ancc_null_frac": {
       "p50": 0.0,
       "p90": 0.0,
@@ -78,10 +94,13 @@
     }
   },
   "category_counts": {
-    "ISO": 1,
-    "MOT": 12,
-    "FLT": 9,
-    "REG": 12
+    "ISO": 2,
+    "FLT": 5,
+    "DRIFT": 13,
+    "MOT": 5,
+    "REG": 5,
+    "TWM": 2,
+    "ANC": 3
   },
   "per_well": [
     {
@@ -104,15 +123,19 @@
       "anchor_range_last100": 3.1300000000010186,
       "eval_regime_oor_frac": 0.577500798977309,
       "eval_regime_oor_max_ft": 19.899999999999636,
+      "eval_offset_from_anchor": 9.554555960370635,
+      "eval_above_pre_max_ft": 19.899999999999636,
+      "eval_below_pre_min_ft": -738.289999999999,
       "tw_gr_corr": 0.7936987185401966,
       "tw_match_n": 1203,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.40772693173293323,
+      "baseline_rmse_const_anchor": 12.14860883171988,
+      "drift_factor": 13.636012543377086,
       "categories": [
         "ISO",
-        "MOT",
         "FLT",
-        "REG"
+        "DRIFT"
       ]
     },
     {
@@ -135,10 +158,15 @@
       "anchor_range_last100": 3.1899999999986903,
       "eval_regime_oor_frac": 0.6884786164991821,
       "eval_regime_oor_max_ft": 34.76000000000022,
+      "eval_offset_from_anchor": 22.64568315026736,
+      "eval_above_pre_max_ft": 34.76000000000022,
+      "eval_below_pre_min_ft": -466.8099999999995,
       "tw_gr_corr": 0.8123216008600737,
       "tw_match_n": 798,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.6061776061776062,
+      "baseline_rmse_const_anchor": 28.442562768264295,
+      "drift_factor": 3.7544415316057362,
       "categories": [
         "MOT",
         "REG"
@@ -164,12 +192,20 @@
       "anchor_range_last100": 2.6600000000016735,
       "eval_regime_oor_frac": 0.0,
       "eval_regime_oor_max_ft": 0.0,
+      "eval_offset_from_anchor": -14.916931747095077,
+      "eval_above_pre_max_ft": -4.819999999999709,
+      "eval_below_pre_min_ft": -954.9899999999998,
       "tw_gr_corr": 0.4941474148015054,
       "tw_match_n": 1980,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.10493062438057482,
+      "baseline_rmse_const_anchor": 16.114411973267114,
+      "drift_factor": 6.117062613881094,
       "categories": [
-        "FLT"
+        "ISO",
+        "FLT",
+        "TWM",
+        "DRIFT"
       ]
     },
     {
@@ -192,12 +228,18 @@
       "anchor_range_last100": 1.1700000000000728,
       "eval_regime_oor_frac": 0.0,
       "eval_regime_oor_max_ft": 0.0,
+      "eval_offset_from_anchor": -26.84151277944875,
+      "eval_above_pre_max_ft": -10.420000000000073,
+      "eval_below_pre_min_ft": -328.8200000000015,
       "tw_gr_corr": 0.46210916219425757,
       "tw_match_n": 1108,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.31772709083633455,
+      "baseline_rmse_const_anchor": 28.1547349569193,
+      "drift_factor": 2.8402248230468086,
       "categories": [
-        "MOT"
+        "REG",
+        "TWM"
       ]
     },
     {
@@ -220,13 +262,19 @@
       "anchor_range_last100": 6.279999999998836,
       "eval_regime_oor_frac": 1.0,
       "eval_regime_oor_max_ft": 68.56000000000131,
+      "eval_offset_from_anchor": 50.76283213677743,
+      "eval_above_pre_max_ft": 68.56000000000131,
+      "eval_below_pre_min_ft": -808.9100000000017,
       "tw_gr_corr": 0.7230296788220144,
       "tw_match_n": 1471,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.1865626143153274,
+      "baseline_rmse_const_anchor": 52.6044312556325,
+      "drift_factor": 1.34308331127661,
       "categories": [
         "MOT",
         "FLT",
+        "ANC",
         "REG"
       ]
     },
@@ -250,13 +298,17 @@
       "anchor_range_last100": 0.3999999999978172,
       "eval_regime_oor_frac": 0.2692820923405391,
       "eval_regime_oor_max_ft": 8.890000000001237,
+      "eval_offset_from_anchor": -2.363477875631361,
+      "eval_above_pre_max_ft": 8.890000000001237,
+      "eval_below_pre_min_ft": -698.0400000000009,
       "tw_gr_corr": 0.7746839923297719,
       "tw_match_n": 1349,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.323923782639379,
+      "baseline_rmse_const_anchor": 6.291181821324148,
+      "drift_factor": 10.699607678344512,
       "categories": [
-        "FLT",
-        "REG"
+        "DRIFT"
       ]
     },
     {
@@ -279,13 +331,17 @@
       "anchor_range_last100": 0.1499999999996362,
       "eval_regime_oor_frac": 0.32076923076923075,
       "eval_regime_oor_max_ft": 11.059999999997672,
+      "eval_offset_from_anchor": -0.7912641025613993,
+      "eval_above_pre_max_ft": 11.059999999997672,
+      "eval_below_pre_min_ft": -820.409999999998,
       "tw_gr_corr": 0.7207891707494785,
       "tw_match_n": 1617,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.07511071744906997,
+      "baseline_rmse_const_anchor": 11.441540407721954,
+      "drift_factor": 5.707385411704195,
       "categories": [
-        "MOT",
-        "REG"
+        "DRIFT"
       ]
     },
     {
@@ -308,13 +364,18 @@
       "anchor_range_last100": 5.049999999999272,
       "eval_regime_oor_frac": 0.43328038125496426,
       "eval_regime_oor_max_ft": 8.290000000000873,
+      "eval_offset_from_anchor": -1.434304209684342,
+      "eval_above_pre_max_ft": 8.290000000000873,
+      "eval_below_pre_min_ft": -592.6400000000012,
       "tw_gr_corr": 0.9068563346238644,
       "tw_match_n": 1053,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.4473684210526316,
+      "baseline_rmse_const_anchor": 7.40185340952753,
+      "drift_factor": 8.754220934164147,
       "categories": [
-        "FLT",
-        "REG"
+        "ANC",
+        "DRIFT"
       ]
     },
     {
@@ -337,12 +398,18 @@
       "anchor_range_last100": 2.780000000000655,
       "eval_regime_oor_frac": 0.0,
       "eval_regime_oor_max_ft": 0.0,
+      "eval_offset_from_anchor": 3.357933707862685,
+      "eval_above_pre_max_ft": -7.149999999999636,
+      "eval_below_pre_min_ft": -539.2600000000002,
       "tw_gr_corr": 0.9049748997290197,
       "tw_match_n": 1621,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.021475409836065575,
+      "baseline_rmse_const_anchor": 7.097332393252612,
+      "drift_factor": 9.068339268708975,
       "categories": [
-        "FLT"
+        "FLT",
+        "DRIFT"
       ]
     },
     {
@@ -365,11 +432,18 @@
       "anchor_range_last100": 4.110000000000582,
       "eval_regime_oor_frac": 0.055635491606714625,
       "eval_regime_oor_max_ft": 2.5,
+      "eval_offset_from_anchor": -3.5850544364529924,
+      "eval_above_pre_max_ft": 2.5,
+      "eval_below_pre_min_ft": -815.7699999999986,
       "tw_gr_corr": 0.7921260705356471,
       "tw_match_n": 1723,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.04919367975240267,
-      "categories": []
+      "baseline_rmse_const_anchor": 6.886899419187453,
+      "drift_factor": 9.254090216815008,
+      "categories": [
+        "DRIFT"
+      ]
     },
     {
       "wid": "e3b34f5b",
@@ -391,13 +465,17 @@
       "anchor_range_last100": 1.890000000001237,
       "eval_regime_oor_frac": 0.27351054078826764,
       "eval_regime_oor_max_ft": 9.0,
+      "eval_offset_from_anchor": -4.280791017417869,
+      "eval_above_pre_max_ft": 9.0,
+      "eval_below_pre_min_ft": -619.2999999999993,
       "tw_gr_corr": 0.8383240272316254,
       "tw_match_n": 1235,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.2868504044974633,
+      "baseline_rmse_const_anchor": 9.849998871013016,
+      "drift_factor": 6.346007344219923,
       "categories": [
-        "MOT",
-        "REG"
+        "DRIFT"
       ]
     },
     {
@@ -420,13 +498,17 @@
       "anchor_range_last100": 0.8299999999999272,
       "eval_regime_oor_frac": 0.31798465131798465,
       "eval_regime_oor_max_ft": 18.070000000001528,
+      "eval_offset_from_anchor": -2.4570706706726924,
+      "eval_above_pre_max_ft": 18.070000000001528,
+      "eval_below_pre_min_ft": -752.9200000000001,
       "tw_gr_corr": 0.8198524986370496,
       "tw_match_n": 1613,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.06006768189509306,
+      "baseline_rmse_const_anchor": 15.152130829371378,
+      "drift_factor": 3.857196074414922,
       "categories": [
-        "MOT",
-        "REG"
+        "MOT"
       ]
     },
     {
@@ -449,13 +531,19 @@
       "anchor_range_last100": 5.599999999998545,
       "eval_regime_oor_frac": 0.0,
       "eval_regime_oor_max_ft": 0.0,
+      "eval_offset_from_anchor": -43.83704591820788,
+      "eval_above_pre_max_ft": -25.93000000000029,
+      "eval_below_pre_min_ft": -755.8299999999981,
       "tw_gr_corr": 0.7453608679377196,
       "tw_match_n": 1514,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.15635379505474228,
+      "baseline_rmse_const_anchor": 45.195305900657345,
+      "drift_factor": 1.2762179207597886,
       "categories": [
         "MOT",
-        "FLT"
+        "ANC",
+        "REG"
       ]
     },
     {
@@ -478,11 +566,18 @@
       "anchor_range_last100": 0.7300000000013824,
       "eval_regime_oor_frac": 0.0,
       "eval_regime_oor_max_ft": 0.0,
+      "eval_offset_from_anchor": -4.528501630838946,
+      "eval_above_pre_max_ft": -2.3299999999999272,
+      "eval_below_pre_min_ft": -864.0900000000001,
       "tw_gr_corr": 0.8546008125265278,
       "tw_match_n": 1840,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.045208738914125024,
-      "categories": []
+      "baseline_rmse_const_anchor": 5.69096312704928,
+      "drift_factor": 10.117533884464816,
+      "categories": [
+        "DRIFT"
+      ]
     },
     {
       "wid": "ab6fe95d",
@@ -504,12 +599,17 @@
       "anchor_range_last100": 1.2299999999995634,
       "eval_regime_oor_frac": 0.6304862502276453,
       "eval_regime_oor_max_ft": 16.579999999999927,
+      "eval_offset_from_anchor": 4.428586177382385,
+      "eval_above_pre_max_ft": 16.579999999999927,
+      "eval_below_pre_min_ft": -813.3299999999999,
       "tw_gr_corr": 0.801082444842999,
       "tw_match_n": 1554,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.23626077586206898,
+      "baseline_rmse_const_anchor": 7.037245274980451,
+      "drift_factor": 8.074525967325496,
       "categories": [
-        "REG"
+        "DRIFT"
       ]
     },
     {
@@ -532,13 +632,17 @@
       "anchor_range_last100": 0.15999999999985448,
       "eval_regime_oor_frac": 0.5781153767193594,
       "eval_regime_oor_max_ft": 28.729999999999563,
+      "eval_offset_from_anchor": 1.6599212276742037,
+      "eval_above_pre_max_ft": 28.729999999999563,
+      "eval_below_pre_min_ft": -932.6599999999999,
       "tw_gr_corr": 0.8713633461204754,
       "tw_match_n": 1599,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.28125,
+      "baseline_rmse_const_anchor": 6.599705542388331,
+      "drift_factor": 8.534590983596996,
       "categories": [
-        "MOT",
-        "REG"
+        "DRIFT"
       ]
     },
     {
@@ -561,12 +665,18 @@
       "anchor_range_last100": 3.349999999998545,
       "eval_regime_oor_frac": 0.0,
       "eval_regime_oor_max_ft": 0.0,
+      "eval_offset_from_anchor": -30.183075104314412,
+      "eval_above_pre_max_ft": -20.200000000000728,
+      "eval_below_pre_min_ft": -528.8899999999994,
       "tw_gr_corr": 0.6477673388008486,
       "tw_match_n": 1133,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.40395852968897267,
+      "baseline_rmse_const_anchor": 33.7618033512535,
+      "drift_factor": 1.660727552297229,
       "categories": [
-        "MOT"
+        "MOT",
+        "REG"
       ]
     },
     {
@@ -589,14 +699,16 @@
       "anchor_range_last100": 2.640000000001237,
       "eval_regime_oor_frac": 0.022653721682847898,
       "eval_regime_oor_max_ft": 2.3799999999991996,
+      "eval_offset_from_anchor": -16.249716598811574,
+      "eval_above_pre_max_ft": 2.3799999999991996,
+      "eval_below_pre_min_ft": -616.6100000000006,
       "tw_gr_corr": 0.8409056056334526,
       "tw_match_n": 1146,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.4256433007985803,
-      "categories": [
-        "MOT",
-        "FLT"
-      ]
+      "baseline_rmse_const_anchor": 17.899912358863492,
+      "drift_factor": 3.0507501847573137,
+      "categories": []
     },
     {
       "wid": "12f0cd90",
@@ -618,13 +730,17 @@
       "anchor_range_last100": 1.5799999999999272,
       "eval_regime_oor_frac": 0.4114679670422062,
       "eval_regime_oor_max_ft": 9.3799999999992,
+      "eval_offset_from_anchor": -0.8201594921793003,
+      "eval_above_pre_max_ft": 9.3799999999992,
+      "eval_below_pre_min_ft": -516.1399999999994,
       "tw_gr_corr": 0.8149049777875268,
       "tw_match_n": 1285,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.25999192571659263,
+      "baseline_rmse_const_anchor": 7.932024037186598,
+      "drift_factor": 6.737514373990924,
       "categories": [
-        "MOT",
-        "REG"
+        "DRIFT"
       ]
     },
     {
@@ -647,13 +763,18 @@
       "anchor_range_last100": 2.3800000000010186,
       "eval_regime_oor_frac": 0.1331877729257642,
       "eval_regime_oor_max_ft": 2.4200000000000728,
+      "eval_offset_from_anchor": -1.4407887918478082,
+      "eval_above_pre_max_ft": 2.4200000000000728,
+      "eval_below_pre_min_ft": -597.8400000000001,
       "tw_gr_corr": 0.7934865987267685,
       "tw_match_n": 1681,
       "ancc_null_frac": 0.0,
       "gr_null_frac": 0.03983088562527815,
+      "baseline_rmse_const_anchor": 4.420586463663259,
+      "drift_factor": 12.030784107482804,
       "categories": [
         "FLT",
-        "REG"
+        "DRIFT"
       ]
     }
   ]

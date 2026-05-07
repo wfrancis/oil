@@ -290,9 +290,23 @@ def main() -> None:
 
         # Typewell correlation requires loading horizontal CSV
         df = pl.read_csv(TRAIN_DIR / f'{wid}__horizontal_well.csv')
-        tvti = df['TVT_input'].to_numpy()
+        for c in ('TVT', 'TVT_input', 'GR'):
+            if df[c].dtype != pl.Float64:
+                df = df.with_columns(pl.col(c).cast(pl.Float64, strict=False))
+        tvti = df['TVT_input'].to_numpy().astype(np.float64)
+        tvt_arr = df['TVT'].to_numpy().astype(np.float64)
         prefix_idx = np.where(~np.isnan(tvti))[0]
+        eval_idx = np.where(np.isnan(tvti))[0]
         tw_corr, tw_n = typewell_corr(wid, prefix_idx, df)
+        # Trivial-baseline RMSE: constant prediction = mean of last-100 anchor values
+        if prefix_idx.size and eval_idx.size:
+            last_n = min(100, prefix_idx.size)
+            const_pred = float(np.nanmean(tvt_arr[prefix_idx[-last_n:]]))
+            baseline_rmse_anchor = float(
+                np.sqrt(np.nanmean((tvt_arr[eval_idx] - const_pred) ** 2))
+            )
+        else:
+            baseline_rmse_anchor = float('nan')
 
         # Build feature dict
         d = {
@@ -322,6 +336,10 @@ def main() -> None:
             'tw_match_n': tw_n,
             'ancc_null_frac': s['ancc_null_frac'],
             'gr_null_frac': s['gr_null_frac'],
+            'baseline_rmse_const_anchor': baseline_rmse_anchor,
+            'drift_factor': (r['tvt_rmse'] / baseline_rmse_anchor
+                             if baseline_rmse_anchor and baseline_rmse_anchor > 0
+                             else float('nan')),
         }
 
         # Categorize
@@ -343,8 +361,10 @@ def main() -> None:
             cats.append('TWM')
         if d['ancc_null_frac'] > COV_NULL_FRAC:
             cats.append('COV')
-        # If nothing fires but RMSE is bad, it's a "drift" case: model loses lock over a long lateral
-        if not cats:
+        # DRIFT: model RMSE is much worse than constant-anchor baseline
+        # (a trivial predictor would beat us by 5x+). Indicates the model's
+        # prediction trajectory drifted, not that the well's true TVT is hard.
+        if not math.isnan(d.get('drift_factor', float('nan'))) and d['drift_factor'] > 5.0:
             cats.append('DRIFT')
 
         d['categories'] = cats

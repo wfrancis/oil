@@ -30,9 +30,12 @@ sys.path.insert(0, str(SRC))
 from feature_builder import FormationPlaneKNN, RowKNN, build_dataset  # noqa: E402
 
 
-# Subset size for runtime budget. 300 wells x ~5k rows/well x 5 folds is
-# manageable at ~1-2 min/fold on M1 Pro.
-N_WELLS_SUBSET = 300
+# Subset size for runtime budget. The dominant cost is the per-well
+# RowKNN.impute (cKDTree.query with n_q=12_000 returning 6k+ neighbors per
+# row), which on M1 Pro is ~2.5 s/well for the v8/v9 feature stack. The
+# user asked for under 30 minutes total; with ~5 objectives x 5 folds of
+# LGB training on top, 150 wells is the safe budget.
+N_WELLS_SUBSET = 150
 SUBSET_SEED = 42
 
 # All five objectives we want to compare. Each entry overrides keys in
@@ -239,6 +242,7 @@ def main() -> int:
     train_pdf = build_dataset(
         paths, plane, row, is_train=True, mlp_imputer=None,
         primary_formation="ANCC", enable_beam=False, label="train",
+        progress_every=25,
     )
     print(
         f"   train shape: {train_pdf.shape}, {time.perf_counter() - t0:.1f}s",
