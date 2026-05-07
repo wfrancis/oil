@@ -162,7 +162,7 @@ class AnisoFormationKNN:
         well_index: list[str],
         *,
         anisotropy: tuple[np.ndarray, np.ndarray] | None = None,
-        nugget: float = 1e-6,
+        nugget: float = 1e-4,
         range_scale: float = 1.0,
     ) -> "AnisoFormationKNN":
         if anisotropy is None:
@@ -248,12 +248,20 @@ class AnisoFormationKNN:
             try:
                 w = np.linalg.solve(K_mat, c_i[..., None]).squeeze(-1)
             except np.linalg.LinAlgError:
-                # Fallback: row-normalize covariance.
-                row_sum = c_i.sum(axis=1, keepdims=True)
-                row_sum = np.where(row_sum < 1e-12, 1.0, row_sum)
-                w = c_i / row_sum
+                w = np.full_like(c_i, np.nan)
 
+            # Numerically-degenerate rows: weights all sub-ULP or non-finite.
+            # Fall back to IDW; if even IDW row-sum is tiny, use uniform 1/K.
             wsum = w.sum(axis=1)
+            bad_solve = (~np.isfinite(w).all(axis=1)) | (np.abs(wsum) < 1e-12)
+            if bad_solve.any():
+                row_sum = c_i.sum(axis=1, keepdims=True)
+                tiny = row_sum < 1e-12
+                row_sum_safe = np.where(tiny, 1.0, row_sum)
+                w_fallback = np.where(tiny, 1.0 / k, c_i / row_sum_safe)
+                w = np.where(bad_solve[:, None], w_fallback, w)
+                wsum = w.sum(axis=1)
+
             wsum_safe = np.where(np.abs(wsum) < 1e-12, 1.0, wsum)
             z_n = self.z[idx_k]                              # (B, K)
             means_b = (z_n * w).sum(axis=1) / wsum_safe
@@ -261,9 +269,9 @@ class AnisoFormationKNN:
             var_b = np.clip(1.0 - (c_i * w).sum(axis=1), 0.0, None)
             std_b = np.sqrt(var_b)
 
-            bad = (np.abs(wsum) < 1e-12) | (~np.any(valid_k, axis=1))
-            means_b = np.where(bad, np.nan, means_b)
-            std_b = np.where(bad, np.nan, std_b)
+            no_neigh = ~np.any(valid_k, axis=1)
+            means_b = np.where(no_neigh, np.nan, means_b)
+            std_b = np.where(no_neigh, np.nan, std_b)
             means[start:stop] = means_b
             stds[start:stop] = std_b
 

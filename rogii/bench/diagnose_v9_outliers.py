@@ -33,14 +33,21 @@ OUT = Path('/Users/william/drilling_oil_gas/rogii/bench/v9_outlier_diagnostics.j
 CAT_TVT_THRESHOLD = 60.0
 TOP_K = 20  # diagnose top-K worst (covers all 11 > 60 ft + margin)
 
-# Hypothesis thresholds (calibrated from population stats below)
-ISO_DIST_FT = 8000.0       # nearest-neighbor centroid distance > this = spatially isolated
-MOT_TVT_RANGE = 30.0       # eval TVT range > 30 ft = high motion
-FLT_DTVT_PER_MD = 0.5      # max |dTVT/dMD| step > this in eval = fault-like jump
-ANC_VAR_LAST_100 = 5.0     # var of last 100 prefix TVT_input > this = bad anchor
-REG_FRACTION_OOR = 0.10    # eval fraction with TVT outside [prefix_min, prefix_max] > 10% = regime drift
-TWM_CORR = 0.30            # |Pearson(GR_horiz, GR_typewell_matched)| < 0.30 in prefix = mismatch
-COV_NULL_FRAC = 0.05       # ANCC null fraction > 5% = coverage gap
+# Hypothesis thresholds (calibrated from population stats — see diagnostics output)
+# Population p50/p90/p95/p99 reference:
+#   nn_dist_ft:                468 / 1422 / 2076 / 4381 ft
+#   eval_tvt_range:            26 / 46 / 54 / 84 ft
+#   eval_max_abs_dtvt_step:    0.11 / 3.0 / 4.2 / 8.1 ft/ft
+#   anchor_var_last100:        0.16 / 1.6 / 2.6 / 5.3 ft^2
+#   eval_regime_oor_frac:      0.31 / 0.93 / 1.0 / 1.0
+#   ev_off_anchor:             0.8 / 16.0 / 20.8 / 40.6 ft
+ISO_DIST_FT = 4000.0       # nearest-neighbor centroid distance > p99 = spatially isolated
+MOT_TVT_RANGE = 45.0       # eval TVT range > p90 = high real motion
+FLT_DTVT_PER_MD = 3.0      # max |dTVT/dMD| step > p90 = fault-like jump
+ANC_VAR_LAST_100 = 2.0     # var of last 100 prefix TVT_input > ~p93 = unstable anchor
+REG_OFF_ANCHOR_FT = 20.0   # |eval_mean - last100_anchor_mean| > p95 = regime offset from anchor
+TWM_CORR = 0.50            # |Pearson(GR_horiz, GR_typewell_matched)| < 0.50 in prefix = weak typewell
+COV_NULL_FRAC = 0.05       # ANCC null fraction > 5% = coverage gap (unused: ANCC never null)
 
 
 def load_results() -> list[dict]:
@@ -59,13 +66,17 @@ def well_summary(wid: str) -> dict | None:
     n = df.height
     if n == 0:
         return None
+    # Cast all numeric columns to f64 (some files have GR/ANCC parse as String due to "")
+    for c in ('TVT', 'TVT_input', 'MD', 'X', 'Y', 'ANCC', 'GR'):
+        if df[c].dtype != pl.Float64:
+            df = df.with_columns(pl.col(c).cast(pl.Float64, strict=False))
     tvt = df['TVT'].to_numpy()
     tvti = df['TVT_input'].to_numpy()
     md = df['MD'].to_numpy()
     x = df['X'].to_numpy()
     y = df['Y'].to_numpy()
-    ancc = df['ANCC'].to_numpy()
-    gr = df['GR'].to_numpy()
+    ancc = df['ANCC'].to_numpy().astype(np.float64)
+    gr = df['GR'].to_numpy().astype(np.float64)
 
     # Prefix: TVT_input not null (== TVT). Eval: TVT_input null.
     prefix_mask = ~np.isnan(tvti)
@@ -113,6 +124,18 @@ def well_summary(wid: str) -> dict | None:
         summ['eval_tvt_range'] = float(np.nanmax(tvt_ev) - np.nanmin(tvt_ev))
         summ['eval_tvt_mean'] = float(np.nanmean(tvt_ev))
         summ['eval_tvt_std'] = float(np.nanstd(tvt_ev))
+        # Anchor-relative offset: mean(eval TVT) - mean(last 100 prefix TVT)
+        if n_prefix > 0:
+            idx_pre = np.where(prefix_mask)[0]
+            last_n = min(100, len(idx_pre))
+            anchor_mean = float(np.nanmean(tvt[idx_pre[-last_n:]]))
+            summ['eval_offset_from_anchor'] = float(np.nanmean(tvt_ev) - anchor_mean)
+            summ['eval_above_pre_max_ft'] = float(np.nanmax(tvt_ev) - summ['prefix_tvt_max'])
+            summ['eval_below_pre_min_ft'] = float(summ['prefix_tvt_min'] - np.nanmin(tvt_ev))
+        else:
+            summ['eval_offset_from_anchor'] = float('nan')
+            summ['eval_above_pre_max_ft'] = float('nan')
+            summ['eval_below_pre_min_ft'] = float('nan')
         # Fault detection: dTVT/dMD step
         # Use sorted-by-MD ordering; assume already in MD order
         order = np.argsort(md_ev)
@@ -154,8 +177,12 @@ def typewell_corr(wid: str, prefix_idx: np.ndarray, df_horiz: pl.DataFrame) -> t
     if not p_tw.exists():
         return float('nan'), 0
     tw = pl.read_csv(p_tw)
-    tw_tvt = tw['TVT'].to_numpy()
-    tw_gr = tw['GR'].to_numpy()
+    if tw['GR'].dtype != pl.Float64:
+        tw = tw.with_columns(pl.col('GR').cast(pl.Float64, strict=False))
+    if tw['TVT'].dtype != pl.Float64:
+        tw = tw.with_columns(pl.col('TVT').cast(pl.Float64, strict=False))
+    tw_tvt = tw['TVT'].to_numpy().astype(np.float64)
+    tw_gr = tw['GR'].to_numpy().astype(np.float64)
     # Filter typewell to non-null GR
     m = ~np.isnan(tw_gr)
     tw_tvt = tw_tvt[m]
@@ -166,9 +193,12 @@ def typewell_corr(wid: str, prefix_idx: np.ndarray, df_horiz: pl.DataFrame) -> t
     order = np.argsort(tw_tvt)
     tw_tvt = tw_tvt[order]
     tw_gr = tw_gr[order]
-    # Horizontal prefix
-    h_tvt = df_horiz['TVT'].to_numpy()[prefix_idx]
-    h_gr = df_horiz['GR'].to_numpy()[prefix_idx]
+    # Horizontal prefix - cast GR if string
+    df_h = df_horiz
+    if df_h['GR'].dtype != pl.Float64:
+        df_h = df_h.with_columns(pl.col('GR').cast(pl.Float64, strict=False))
+    h_tvt = df_h['TVT'].to_numpy().astype(np.float64)[prefix_idx]
+    h_gr = df_h['GR'].to_numpy().astype(np.float64)[prefix_idx]
     m2 = ~np.isnan(h_gr) & ~np.isnan(h_tvt)
     h_tvt = h_tvt[m2]
     h_gr = h_gr[m2]
@@ -285,6 +315,9 @@ def main() -> None:
             'anchor_range_last100': s['anchor_range_last100'],
             'eval_regime_oor_frac': s['eval_regime_oor_frac'],
             'eval_regime_oor_max_ft': s['eval_regime_oor_max_ft'],
+            'eval_offset_from_anchor': s.get('eval_offset_from_anchor', float('nan')),
+            'eval_above_pre_max_ft': s.get('eval_above_pre_max_ft', float('nan')),
+            'eval_below_pre_min_ft': s.get('eval_below_pre_min_ft', float('nan')),
             'tw_gr_corr': tw_corr,
             'tw_match_n': tw_n,
             'ancc_null_frac': s['ancc_null_frac'],
@@ -303,13 +336,16 @@ def main() -> None:
         if not math.isnan(d['anchor_var_last100']) and \
                 d['anchor_var_last100'] > ANC_VAR_LAST_100:
             cats.append('ANC')
-        if not math.isnan(d['eval_regime_oor_frac']) and \
-                d['eval_regime_oor_frac'] > REG_FRACTION_OOR:
+        if not math.isnan(d['eval_offset_from_anchor']) and \
+                abs(d['eval_offset_from_anchor']) > REG_OFF_ANCHOR_FT:
             cats.append('REG')
         if not math.isnan(d['tw_gr_corr']) and abs(d['tw_gr_corr']) < TWM_CORR:
             cats.append('TWM')
         if d['ancc_null_frac'] > COV_NULL_FRAC:
             cats.append('COV')
+        # If nothing fires but RMSE is bad, it's a "drift" case: model loses lock over a long lateral
+        if not cats:
+            cats.append('DRIFT')
 
         d['categories'] = cats
         diag_rows.append(d)
@@ -324,7 +360,8 @@ def main() -> None:
     # to gauge how outlier-y the bad wells are vs typical
     pop_baselines = {}
     for k in ['eval_tvt_range', 'eval_max_abs_dtvt_per_dmd', 'eval_max_abs_dtvt_step',
-              'anchor_var_last100', 'eval_regime_oor_frac', 'ancc_null_frac', 'gr_null_frac']:
+              'anchor_var_last100', 'eval_regime_oor_frac', 'eval_offset_from_anchor',
+              'eval_above_pre_max_ft', 'ancc_null_frac', 'gr_null_frac']:
         vals = np.array([s.get(k, np.nan) for s in all_summaries.values()])
         vals = vals[~np.isnan(vals)]
         if vals.size:
@@ -364,7 +401,7 @@ def main() -> None:
             'MOT_TVT_RANGE': MOT_TVT_RANGE,
             'FLT_DTVT_PER_MD': FLT_DTVT_PER_MD,
             'ANC_VAR_LAST_100': ANC_VAR_LAST_100,
-            'REG_FRACTION_OOR': REG_FRACTION_OOR,
+            'REG_OFF_ANCHOR_FT': REG_OFF_ANCHOR_FT,
             'TWM_CORR': TWM_CORR,
             'COV_NULL_FRAC': COV_NULL_FRAC,
         },
