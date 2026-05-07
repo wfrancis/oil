@@ -192,11 +192,21 @@ def main() -> int:
         well_full_xy[w] = np.column_stack([a["X"], a["Y"]]).astype(np.float64)
     print(f"   built in {time.perf_counter()-t0:.1f}s", flush=True)
 
-    # GroupKFold
+    # Pre-encode wids to ints so gkf.split (and later fold ops) avoids the
+    # 5M string-dict lookups inside sklearn.
+    print("== integer-encoding well IDs ==", flush=True)
+    t0 = time.perf_counter()
+    name_to_int = {w: i for i, w in enumerate(unique_wells)}
+    wids_all_int = np.fromiter(
+        (name_to_int[w] for w in wids_all), dtype=np.int32, count=len(wids_all)
+    )
+    print(f"   {time.perf_counter()-t0:.1f}s", flush=True)
+
+    # GroupKFold (group by integer well-id for speed)
     print("== computing GroupKFold splits ==", flush=True)
     t0 = time.perf_counter()
     gkf = GroupKFold(n_splits=args.n_folds, shuffle=True, random_state=args.seed)
-    splits = list(gkf.split(xy_all, targets_all[:, f_idx_ancc], groups=wids_all))
+    splits = list(gkf.split(xy_all, targets_all[:, f_idx_ancc], groups=wids_all_int))
     print(f"   {len(splits)} splits in {time.perf_counter()-t0:.1f}s", flush=True)
 
     variants = [v.strip() for v in args.variants.split(",") if v.strip()]
@@ -220,16 +230,6 @@ def main() -> int:
             "config": VARIANTS[v],
         }
 
-    # Pre-encode all wids to ints once (faster than per-fold list/set ops on
-    # an N=5M object array of strings).
-    print("== integer-encoding well IDs ==", flush=True)
-    t0 = time.perf_counter()
-    wids_all_int = np.zeros(len(wids_all), dtype=np.int32)
-    well_to_int = {w: i for i, w in enumerate(unique_wells)}
-    for i, w in enumerate(wids_all):
-        wids_all_int[i] = well_to_int[w]
-    print(f"   {time.perf_counter()-t0:.1f}s", flush=True)
-
     for fold_idx, (tr, va) in enumerate(splits):
         val_well_set = np.unique(wids_all_int[va])
         print(f"\n=== fold {fold_idx} : {len(val_well_set)} val wells, "
@@ -250,8 +250,9 @@ def main() -> int:
         print(f"   aniso est R={R.flatten().round(3).tolist()} sigma={sigma.round(3).tolist()} "
               f"({time.perf_counter()-t0:.1f}s)", flush=True)
 
-        # Pre-collect val xy_q
-        w_order = sorted(val_well_set)
+        # Pre-collect val xy_q. val_well_set is an int array — translate
+        # back to well name via unique_wells (which is the well_to_int domain).
+        w_order = [unique_wells[i] for i in sorted(val_well_set.tolist())]
         xy_q_list = [well_full_xy[w] for w in w_order]
         w_lengths = [len(x) for x in xy_q_list]
         xy_q = np.concatenate(xy_q_list)

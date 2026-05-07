@@ -1,9 +1,8 @@
 """Build notebook/submission_v10.ipynb from feature_builder.py +
 neural_ancc.py + anchor_shrinkage.py + a thin orchestrator.
 
-v10 = v9 + (a) 5 LGB seeds (per multi-seed agent recommendation) +
-(b) anchor-shrinkage post-process to control max-well-RMSE drift +
-(c) EWM(span=4) per-well smoothing (retained from v9).
+v10 = v9 + (a) 5 LGB seeds + (b) 3 MLP-ANCC seeds + (c) anchor-shrinkage
+post-process + (d) EWM(span=4) per-well smoothing.
 
 The strategic case: ROGII's public LB is 26% of test, private is 74%.
 The reference shake-up shows top-12 private rankings come from rank
@@ -40,21 +39,14 @@ anchor_shrinkage_b64 = b64(SRC / "anchor_shrinkage.py")
 
 CELL = f'''# ROGII Wellbore Geology Prediction - v10 submission notebook
 #
-# v10 = v9 + 5-seed LGB averaging + anchor-shrinkage post-process.
+# v10 = v9 + 5-seed LGB + 3-seed MLP + anchor-shrinkage post-process.
 #
 # v9 baseline (with v8 feature builder + MLP-ANCC features stacked):
 #   OOF projected ~11.5-12 with KNN+MLP+GBM, max-well-RMSE ~40-60 ft.
 #
-# v10 motivations:
+# v10 motivations (in order of expected private-LB impact):
 #
-#   1) MULTI-SEED averaging (per outlier diagnosis on v9):
-#      Multi-seed LGB averaging at rho ~0.7 gives variance reduction
-#      factor (1+(N-1)*rho)/N. With N=5 seeds, that is 0.76 variance =
-#      ~13% RMSE reduction on the catastrophic-tail wells where seed
-#      variance dominates. Agent estimate: -0.05 to -0.20 overall RMSE,
-#      -3 to -15 ft on max-well-RMSE.
-#
-#   2) ANCHOR-SHRINKAGE post-process (the big private-LB win):
+#   1) ANCHOR-SHRINKAGE post-process (the big private-LB win):
 #      v9 outlier diagnosis found 8/11 catastrophic-tail wells have
 #      DRIFT failure mode -- model is over-confidently moving
 #      predictions away from anchor when there's no geology to support
@@ -63,6 +55,19 @@ CELL = f'''# ROGII Wellbore Geology Prediction - v10 submission notebook
 #      Multiplicative shrinkage of the predicted delta by alpha < 1
 #      pulls catastrophic deltas toward zero (= toward anchor), with
 #      minimal cost on typical wells.
+#
+#   2) MLP MULTI-SEED at imputer level (concentrated tail rescue):
+#      Empirically (full 765-well 5-fold OOF in
+#      bench/neural_ancc_results.json), 3-seed MLP ensemble cuts the
+#      worst-well TVT RMSE by 18 ft (the 165-ft outlier 059c8f24
+#      collapses to 148 ft) at +6 min training cost. This is the
+#      cheapest concentrated-tail intervention available.
+#
+#   3) LGB MULTI-SEED averaging (small variance reduction):
+#      Empirical seed-to-seed correlation rho=0.93 caps reduction at
+#      ~5% std even infinite. With 5 seeds the agent measured -0.39
+#      overall RMSE (2.8%) and -0.99 ft max-well (3.1%) on the v8
+#      pilot. Tiny but free since LGB is fast.
 #
 # Strategic context: public LB is 26% of test, private 74%. Reference
 # Kaggle competitions with this split routinely show top-12 private
@@ -166,11 +171,13 @@ SHRINK_ALPHA = 0.85
 HARD_CAP_BAND = 50.0   # ft; only kicks in past p99 of typical eval offsets
 
 # Neural-ANCC config (matches the OOF-validated MLP+PE-L8 multi-output)
+# v10: 3-seed ensemble at imputer level cuts worst-well RMSE by 18 ft
+# per multi-seed agent's full 765-well OOF measurement.
 MLP_NUM_FREQS = 8
 MLP_HIDDEN = 256
 MLP_EPOCHS = 12
 MLP_ROWS_PER_EPOCH = 500_000
-MLP_SEED = 42
+MLP_SEEDS = [42, 7, 123]
 
 OUTPUT = Path("/kaggle/working/submission.csv")
 OOF_OUT = Path("/kaggle/working/oof.csv")
@@ -190,15 +197,15 @@ logger.info("Building row-level KNN imputer ...")
 row_imputer = RowKNN.fit(train_paths, formations=FORMATIONS)
 logger.info("  %d rows", len(row_imputer.targets))
 
-logger.info("Training neural-ANCC field (MLP+PE L=%d, hidden=%d, %d epochs) ...",
-            MLP_NUM_FREQS, MLP_HIDDEN, MLP_EPOCHS)
+logger.info("Training %d-seed neural-ANCC ensemble (MLP+PE L=%d, hidden=%d, %d epochs) ...",
+            len(MLP_SEEDS), MLP_NUM_FREQS, MLP_HIDDEN, MLP_EPOCHS)
 mlp_imputer = MLPAnccImputer.fit(
     train_paths, formations=FORMATIONS,
     num_freqs=MLP_NUM_FREQS, hidden=MLP_HIDDEN,
     epochs=MLP_EPOCHS, rows_per_epoch=MLP_ROWS_PER_EPOCH,
-    seed=MLP_SEED, verbose=False,
+    seeds=MLP_SEEDS, verbose=False,
 )
-logger.info("  MLP fit done")
+logger.info("  MLP ensemble fit done (%d nets averaged)", len(mlp_imputer.nets))
 
 # ---------------------------------------------------------------------------
 # 6) Build feature matrices

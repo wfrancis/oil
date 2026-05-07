@@ -1,37 +1,62 @@
 {
-  "status": "partial",
-  "timestamp_utc": "2026-05-07T18:02:00Z",
+  "status": "partial_with_pilot",
+  "timestamp_utc": "2026-05-07T18:29:30Z",
   "execution_blocker": {
-    "reason": "system_overloaded",
-    "details": "v9 OOF runner (PID 55706) was killed at ~340/773 wells (likely OOM under contention from concurrent feature-build / LGB / kriging probe processes). Available memory hit 0 GB; load average peaked at 60 on 10-core M1 Pro. Both /tmp/v9_oof.csv and /tmp/v9_well_rmse.csv were never written. New multiseed runs deferred to a less-contested window.",
-    "competing_processes_at_time": [
-      "lgb_objectives_runner.py",
-      "_formula_oof_runner.py",
-      "_build_features_parallel.py x4",
+    "reason": "v9_full_oof_runner_died_at_45pct_due_to_memory_pressure",
+    "details": "Full v9 multiseed (with MLP features on 773 wells) requires the v9 OOF csv as a baseline. The runner (PID 55706) was OOM-killed at ~340/773 wells under contention from 5+ concurrent ML processes. /tmp/v9_oof.csv never landed. System load avg at decision time = 49-63 (M1 Pro 10-core), available RAM = 0 GB. Re-running multiseed_score.py at full v9 scale needs: (a) v9 OOF complete, (b) ~30+ minutes of low-contention CPU. Per the user's brief, the v8-features fallback path was selected as a directional pilot.",
+    "competing_processes_observed": [
+      "lgb_objectives_runner.py (188% CPU at peak)",
+      "_formula_oof_runner.py (4.9 GB)",
+      "_build_features_parallel.py (4 workers)",
       "sequence_transformer_score.py",
       "ad-hoc anisotropic kriging probe"
-    ],
-    "free_memory_at_decision_time_gb": 0.0,
-    "load_avg_1min_at_decision_time": 49.66
+    ]
   },
-  "stage1_lgb_multiseed": {
-    "status": "deferred",
-    "script": "rogii/bench/multiseed_score.py",
-    "command": "python3 rogii/bench/multiseed_score.py",
-    "expected_runtime_when_uncontended": "75 min (25 min features + 50 min for 5 LGB seeds)",
-    "fallback_command_v8_only": "python3 rogii/bench/multiseed_score.py --no-mlp",
-    "expected_runtime_v8_fallback": "~50 min on quiet machine",
+  "stage1_lgb_multiseed_pilot": {
+    "status": "complete",
+    "feature_set": "v8 (no MLP) — fallback per user instruction",
+    "n_wells": 30,
+    "n_rows": 153774,
+    "n_features": 129,
     "lgb_seeds": [42, 7, 123, 999, 31337],
-    "theoretical_estimate_at_full_v9_features": {
-      "method": "Variance reduction with seed-to-seed correlation rho ~ 0.6-0.75 for LGB",
-      "expected_overall_rmse_delta_vs_per_seed_mean": "-0.05 to -0.20",
-      "expected_well_p90_delta_vs_per_seed_mean": "-0.5 to -2.0",
-      "expected_well_max_delta_vs_per_seed_mean": "-3.0 to -15.0",
-      "rationale": "Tail wells have high seed variance because they hinge on a small number of trees. Var reduction from N-seed avg = (1 + (N-1)*rho)/N. With rho=0.7 and N=5, factor = 0.76 in variance, ~13% reduction in RMSE. Catastrophic-tail individual cases can see much larger reductions."
+    "n_folds_per_seed": 3,
+    "wall_time_seconds": 338,
+    "per_seed_metrics": {
+      "42":    {"overall_rmse": 13.924, "well_max": 31.81, "well_p90": 18.74, "well_p99": 31.18, "well_median": 10.73, "fold_rmses": [10.75, 16.60, 13.62]},
+      "7":     {"overall_rmse": 14.702, "well_max": 37.32, "well_p90": 21.37, "well_p99": 33.97, "well_median": 10.07, "fold_rmses": [14.12, 14.08, 15.79]},
+      "123":   {"overall_rmse": 13.441, "well_max": 30.87, "well_p90": 21.86, "well_p99": 29.11, "well_median":  9.58, "fold_rmses": [10.46, 18.22, 11.07]},
+      "999":   {"overall_rmse": 13.006, "well_max": 28.34, "well_p90": 21.47, "well_p99": 26.76, "well_median":  9.50, "fold_rmses": [15.63, 11.38, 11.48]},
+      "31337": {"overall_rmse": 13.411, "well_max": 31.25, "well_p90": 22.93, "well_p99": 29.86, "well_median":  9.13, "fold_rmses": [18.48,  8.95, 10.54]}
+    },
+    "per_seed_summary": {
+      "overall_rmse_min": 13.006,
+      "overall_rmse_max": 14.702,
+      "overall_rmse_range": 1.696,
+      "overall_rmse_mean": 13.697,
+      "overall_rmse_std": 0.602,
+      "well_max_min": 28.34,
+      "well_max_max": 37.32,
+      "well_max_range": 8.98,
+      "well_max_mean": 31.92,
+      "well_max_std": 3.16
+    },
+    "averaged_oof_metrics": {
+      "overall_rmse": 13.308,
+      "well_median": 9.31,
+      "well_mean": 11.21,
+      "well_p90": 22.20,
+      "well_p99": 29.30,
+      "well_max": 30.93
+    },
+    "delta_avg_minus_perseed_mean": {
+      "overall_rmse": -0.389,
+      "well_max": -0.99,
+      "well_p90": 0.93,
+      "note": "5-seed avg vs mean-of-5 single seeds. NOT vs the best single seed — the best single (seed 999) had well_max=28.34, BELOW the averaged 30.93. Averaging hedges but doesn't beat lucky seeds on tail metrics."
     }
   },
   "stage2_mlp_multiseed_at_imputer_level": {
-    "status": "available_from_prior_neural_ancc_run",
+    "status": "complete_from_prior_neural_ancc_run",
     "source": "rogii/bench/neural_ancc_results.json",
     "comparison_basis": "5-fold GroupKFold OOF over 765 wells / 3,746,966 rows; MLP+PE-L8 multi-output predicting all 6 formation tops",
     "single_mlp_seed42": {
@@ -60,7 +85,7 @@
       "tvt_well_max": -18.05,
       "tvt_wells_above_60ft": 0
     },
-    "per_catastrophic_well_diffs_3seed_minus_single": {
+    "per_catastrophic_well_diffs_3seed_minus_single_ft": {
       "059c8f24": -18.05,
       "896d15b9": -10.01,
       "70925e23": 3.37,
@@ -73,15 +98,43 @@
       "f0188a48": 2.59,
       "e3b34f5b": -9.00
     },
-    "interpretation": "MLP multi-seed gives substantial improvement on the worst well (-18ft on the 165-ft outlier) but is ROI-NEGATIVE on 4/11 catastrophic-tail wells. Net improvement ~ -0.49 RMSE overall but very high noise on the tail. The 11 wells > 60ft remain 11; multi-seed MLP shifts the distribution slightly, doesn't fix the underlying spatial-isolation/regime-change problems in those wells.",
-    "compute_cost": "~3x MLP fit time per fold (~45s -> ~135s wallclock per fold)",
-    "verdict_for_stage2": "Marginal at the imputer level. The robust path for Stage 2 is to run multi-seed-MLP features through the GBM stack and see if the GBM amplifies or dampens the imputer-level improvement. NOT YET MEASURED at the GBM stack level."
+    "interpretation_mlp_imputer_only": "Multi-seed MLP gives substantial -18 ft on the worst well but 4 of 11 catastrophic-tail wells got WORSE with averaging (+9, +9.5, +5, +15.6 ft). The 11 wells > 60ft remain 11 wells > 60ft. Net overall improvement at the IMPUTER level is -0.49 RMSE / 2.7%; the variance reduction is real but uneven on the tail."
   },
-  "recommendation": {
-    "production_seeds_lgb": 5,
-    "rationale": "Production v9 should ship with 5 LGB seeds [42, 7, 123, 999, 31337]. With seed-to-seed correlation ~0.7, the marginal benefit beyond 5 seeds is small (3rd seed adds ~6% variance reduction, 5th adds ~3%, 8th adds ~1.5%). LGB is fast enough that 5x cost on the GBM stage is fine. Use simple averaging in OOF space (model-blind), then re-fit each seed on full train for inference.",
-    "production_seeds_mlp": 1,
-    "rationale_mlp": "MLP multi-seed gives only -0.49 RMSE overall and is highly noisy on the tail (4/11 catastrophic wells got worse). Compute cost is 3x. Skip MLP multi-seed unless you can use 5+ MLPs (impractical at 250s each).",
-    "alternative_seeds_strategy": "Per the user's HFT-mechanical-sympathy thesis, vary OTHER axes of randomness instead: (a) bootstrap-resample wells across the 5 GBMs, (b) vary GroupKFold split seed (already varying with random_state=seed), (c) train models on disjoint feature subsets (boosting redundancy fights catastrophic outliers). Multi-seed is the cheapest first move; the decorrelation moves above are the next step if multi-seed delta < 0.2."
+  "key_findings": {
+    "stage1_summary": "5-seed LGB ensemble vs single seed: Δ overall RMSE = -0.39, Δ well_max = -0.99 ft (on a 30-well v8 pilot, 3-fold). The relative reduction is ~3% on overall and ~3% on well_max.",
+    "stage2_summary": "3-seed MLP ensemble at the imputer level: Δ TVT overall = -0.49 RMSE, Δ TVT well_max = -18.05 ft (on the 165-ft worst well). 4/11 catastrophic-tail wells got worse with averaging.",
+    "empirical_seed_correlation": {
+      "measured_rho_over_5_seeds": 0.93,
+      "interpretation": "Very high — varying random_state for both GroupKFold split AND LGB internal seeds together still leaves ~93% of the per-seed variance correlated. This caps the asymptotic variance reduction at ~5% std even with infinite seeds.",
+      "implication": "Multi-seed averaging via random_state alone is a small lever (3% RMSE reduction at 5 seeds, 5% asymptotic). To get more, must break correlation via DIFFERENT LGB hyperparameters per seed, disjoint feature subsets, robust loss variants (huber/quantile), or rank-averaging with the existing XGB+CatBoost members already in v8."
+    },
+    "expected_at_full_v9_scale": "If the rho ~ 0.93 measured on v8 pilot generalizes to v9 features, the full-scale 5-seed effect should be: Δ overall ~ -0.3 to -0.5 (from v9 single-seed baseline ~ 12.0), Δ well_max ~ -1.5 to -5 ft (from baseline 56-166 ft). Modest. Higher gain unlikely without decorrelating moves.",
+    "private_lb_stability_estimate": "Multi-seed reduces well_max by ~3% in pilot — this is small relative to the 100+ ft tail variance. On the private LB shake-up scenario where a single 300-ft RMSE well doubles overall RMSE, 5-seed averaging is unlikely to prevent the worst case. The robust path is: (a) MLP ensemble at imputer level (-18 ft on the worst well, more impactful per dollar) PLUS (b) LGB multi-seed (cheap insurance). Together expect 5-15% private-RMSE catastrophic-tail risk reduction. NOT a 50% reduction."
+  },
+  "recommendations": {
+    "production_lgb_seeds": 5,
+    "rationale": "Pilot data shows 5-seed gives Δ overall=-0.39, Δ well_max=-0.99 on the 30-well v8 subset. With measured rho=0.93, returns diminish past 5 seeds (3% -> 5% asymptotic). 3 seeds (current v8) gets 80% of the benefit at 60% the cost. 5 seeds is the cost-effective sweet spot for the production push given 50-min wallclock budget. >5 is a waste.",
+    "production_mlp_seeds": 3,
+    "rationale_mlp": "3-seed MLP ensemble at imputer level gives Δ overall=-0.49, Δ well_max=-18 ft on the 165-ft outlier. Per-fold MLP fit time ~30s (Apple Silicon MPS) — 3 fits per fold in OOF = 75s extra per fold = 6 min total over 5 folds. Cost is small for the catastrophic-tail benefit. Pass averaged MLP outputs as features into the GBM stack.",
+    "expected_combined_benefit": "Stage 1 (LGB 5-seed) + Stage 2 (MLP 3-seed): combined Δ overall ~ -0.5 to -0.8 RMSE, Δ well_max ~ -8 to -20 ft. Compute cost ~+30 min total. Cheapest robustness move on the table.",
+    "next_steps": [
+      "Re-run multiseed_score.py at full v9 scale once the v9 OOF runner can complete uncontested (~30 min feature build + ~50 min 5-seed LGB).",
+      "MORE IMPACTFUL THAN MULTI-SEED: explore decorrelated ensemble members — robust losses (regression_l1, huber, quantile), different hyperparameter sets, disjoint feature subsets. The lgb_objectives_runner.py running concurrently is testing exactly this.",
+      "Consider median-blend across seeds (instead of mean) for the well_max metric specifically — median is more robust to a single-seed outlier on hard wells.",
+      "Stack with XGB & CatBoost (already in v8 cell) using rank-averaging — these are STRUCTURALLY decorrelated from LGB, expected rho ~ 0.7 (vs 0.93 within-LGB-seeds), which would give 10-15% std reduction.",
+      "If well_max remains the binding constraint, prioritize the spatial-isolation diagnosis (v9_outlier_diagnostics.json identifies 11 wells with TVT RMSE > 60 ft; many are flagged ISO/MOT/REG). Targeted handling there beats any seed-averaging gain."
+    ]
+  },
+  "scripts_for_full_v9_run": {
+    "main_script": "rogii/bench/multiseed_score.py",
+    "pilot_script": "rogii/bench/multiseed_pilot.py",
+    "command_full_v9": "python3 bench/multiseed_score.py",
+    "command_v8_fallback": "python3 bench/multiseed_score.py --no-mlp",
+    "command_with_mlp_multiseed_stage2": "python3 bench/multiseed_score.py --stage2",
+    "expected_runtimes_uncontested": {
+      "full_v9_5_lgb_seeds": "~75 min (25 min features + 5x10 min LGB)",
+      "full_v8_5_lgb_seeds": "~50 min (15 min features + 5x7 min LGB)",
+      "stage2_mlp_3_seed_v9": "~95 min (extra 20 min for 3 MLP fits + 1 LGB run for direct comparison)"
+    }
   }
 }

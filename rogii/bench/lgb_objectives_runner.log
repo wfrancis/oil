@@ -35,3 +35,4 @@
 
 >> objective=huber
    fold 0: rmse=26.6226  best_iter=97  walltime=36.6s
+   fold 1: rmse=20.7426  best_iter=2592  walltime=398.5s
