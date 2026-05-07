@@ -45,3 +45,25 @@
    fold 0: rmse=26.9992  best_iter=1  walltime=20.6s
    fold 1: rmse=22.5097  best_iter=235  walltime=59.7s
    fold 2: rmse=20.7674  best_iter=50  walltime=31.1s
+   fold 3: rmse=23.1364  best_iter=372  walltime=71.0s
+   fold 4: rmse=19.0513  best_iter=32  walltime=22.4s
+   overall_rmse=22.6261  max_well_rmse=55.95  p90_well_rmse=39.98  mean_walltime/fold=41.0s
+
+>> objective=tweedie_1.5
+   fold 0: rmse=27.1428  best_iter=1  walltime=13.0s
+   fold 1: rmse=21.2029  best_iter=108  walltime=23.6s
+   fold 2: rmse=19.4542  best_iter=33  walltime=16.3s
+   fold 3: rmse=21.0959  best_iter=314  walltime=38.6s
+   fold 4: rmse=20.7956  best_iter=11  walltime=13.6s
+   overall_rmse=22.0560  max_well_rmse=52.52  p90_well_rmse=36.06  mean_walltime/fold=21.0s
+
+>> Wrote /Users/william/drilling_oil_gas/rogii/bench/lgb_objectives_results.json
+>> Total wall time: 2110.0s
+
+>> SUMMARY
+objective            rmse  med_well  p90_well  max_well   wt/fold
+regression        21.5965     12.97     39.73     50.08      47.0s
+regression_l1     22.1693     12.43     35.66     57.68      43.9s
+huber             23.0760     11.12     42.09     56.15     173.6s
+quantile_0.5      22.6261     12.76     39.98     55.95      41.0s
+tweedie_1.5       22.0560     12.37     36.06     52.52      21.0s

@@ -1,0 +1,204 @@
+{
+  "n_wells_subset": 50,
+  "subset_seed": 42,
+  "n_rows": 257916,
+  "n_features": 129,
+  "kfold": "GroupKFold(n_splits=5, shuffle=True, random_state=42)",
+  "lgb_params_base": {
+    "boosting_type": "gbdt",
+    "learning_rate": 0.06,
+    "num_leaves": 89,
+    "min_child_samples": 10,
+    "min_child_weight": 0.5,
+    "n_estimators": 3000,
+    "n_jobs": -1,
+    "reg_alpha": 2.03,
+    "reg_lambda": 87.28,
+    "subsample": 0.645,
+    "subsample_freq": 1,
+    "colsample_bytree": 0.821,
+    "verbose": -1,
+    "random_state": 42
+  },
+  "results": [
+    {
+      "objective": "regression",
+      "params_extra": {
+        "objective": "regression",
+        "metric": "rmse"
+      },
+      "overall_rmse": 21.59650421142578,
+      "fold_rmses": [
+        26.85964012145996,
+        20.210264205932617,
+        20.45970344543457,
+        20.80592918395996,
+        19.29325294494629
+      ],
+      "fold_walltime_sec": [
+        22.469272625050507,
+        69.55803037504666,
+        26.66443183401134,
+        88.69825729203876,
+        27.425720916013233
+      ],
+      "fold_best_iters": [
+        2,
+        245,
+        28,
+        472,
+        7
+      ],
+      "mean_walltime_per_fold_sec": 46.9631426084321,
+      "median_well_rmse": 12.967576026916504,
+      "mean_well_rmse": 17.179319381713867,
+      "p90_well_rmse": 39.7267951965332,
+      "max_well_rmse": 50.075035095214844,
+      "n_wells": 50
+    },
+    {
+      "objective": "regression_l1",
+      "params_extra": {
+        "objective": "regression_l1",
+        "metric": "rmse"
+      },
+      "overall_rmse": 22.169321060180664,
+      "fold_rmses": [
+        26.99855613708496,
+        21.337562561035156,
+        19.415416717529297,
+        23.932445526123047,
+        18.16684341430664
+      ],
+      "fold_walltime_sec": [
+        25.720578708918765,
+        53.13919437502045,
+        33.81419800000731,
+        71.11252462491393,
+        35.70885470788926
+      ],
+      "fold_best_iters": [
+        1,
+        212,
+        51,
+        290,
+        42
+      ],
+      "mean_walltime_per_fold_sec": 43.89907008334994,
+      "median_well_rmse": 12.434995651245117,
+      "mean_well_rmse": 17.332569122314453,
+      "p90_well_rmse": 35.65522766113281,
+      "max_well_rmse": 57.679786682128906,
+      "n_wells": 50
+    },
+    {
+      "objective": "huber",
+      "params_extra": {
+        "objective": "huber",
+        "alpha": 0.95,
+        "metric": "rmse"
+      },
+      "overall_rmse": 23.076005935668945,
+      "fold_rmses": [
+        26.62258529663086,
+        20.74260902404785,
+        20.299863815307617,
+        28.00065040588379,
+        18.35993194580078
+      ],
+      "fold_walltime_sec": [
+        36.61537341598887,
+        398.4688000000315,
+        229.66775875003077,
+        116.9121110830456,
+        86.44776062504388
+      ],
+      "fold_best_iters": [
+        97,
+        2592,
+        1045,
+        544,
+        388
+      ],
+      "mean_walltime_per_fold_sec": 173.6223607748281,
+      "median_well_rmse": 11.119590759277344,
+      "mean_well_rmse": 17.281429290771484,
+      "p90_well_rmse": 42.08942794799805,
+      "max_well_rmse": 56.14621353149414,
+      "n_wells": 50
+    },
+    {
+      "objective": "quantile_0.5",
+      "params_extra": {
+        "objective": "quantile",
+        "alpha": 0.5,
+        "metric": "rmse"
+      },
+      "overall_rmse": 22.626131057739258,
+      "fold_rmses": [
+        26.99919319152832,
+        22.509733200073242,
+        20.767353057861328,
+        23.136438369750977,
+        19.051298141479492
+      ],
+      "fold_walltime_sec": [
+        20.60418491694145,
+        59.74278441700153,
+        31.124255208997056,
+        71.04149904195219,
+        22.359813416027464
+      ],
+      "fold_best_iters": [
+        1,
+        235,
+        50,
+        372,
+        32
+      ],
+      "mean_walltime_per_fold_sec": 40.97450740018394,
+      "median_well_rmse": 12.756622314453125,
+      "mean_well_rmse": 17.796432495117188,
+      "p90_well_rmse": 39.98046112060547,
+      "max_well_rmse": 55.95260238647461,
+      "n_wells": 50
+    },
+    {
+      "objective": "tweedie_1.5",
+      "params_extra": {
+        "objective": "tweedie",
+        "tweedie_variance_power": 1.5,
+        "metric": "rmse"
+      },
+      "overall_rmse": 22.05597686767578,
+      "fold_rmses": [
+        27.142841339111328,
+        21.202856063842773,
+        19.454166412353516,
+        21.095947265625,
+        20.795637130737305
+      ],
+      "fold_walltime_sec": [
+        13.008390999981202,
+        23.55538975005038,
+        16.257624124991708,
+        38.623202249989845,
+        13.555974708055146
+      ],
+      "fold_best_iters": [
+        1,
+        108,
+        33,
+        314,
+        11
+      ],
+      "mean_walltime_per_fold_sec": 21.000116366613657,
+      "median_well_rmse": 12.37200927734375,
+      "mean_well_rmse": 17.417261123657227,
+      "p90_well_rmse": 36.0589714050293,
+      "max_well_rmse": 52.52033233642578,
+      "n_wells": 50
+    }
+  ],
+  "total_walltime_sec": 2109.9953698749887
+}

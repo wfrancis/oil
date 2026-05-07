@@ -1,0 +1,126 @@
+{
+  "base": {
+    "max_well_rmse": 56.09579783976689,
+    "median_well_rmse": 7.830526589034791,
+    "overall_bias": 0.006624510555505881,
+    "overall_mae": 8.032745999580335,
+    "overall_rmse": 11.40587670777594,
+    "p90_well_rmse": 15.994423199760242
+  },
+  "constant_baseline": {
+    "max_well_rmse": 70.63900757329154,
+    "median_well_rmse": 10.66540210136551,
+    "overall_bias": -1.5959855827151646,
+    "overall_mae": 11.196490327102925,
+    "overall_rmse": 15.90986607686592,
+    "p90_well_rmse": 22.972613611499636
+  },
+  "constant_shrinkage": {
+    "alpha=0.3": {
+      "max_well_rmse": 66.11039979043052,
+      "median_well_rmse": 9.105425478969023,
+      "overall_bias": -1.1152025547339635,
+      "overall_mae": 9.62471944666728,
+      "overall_rmse": 13.77972210936087,
+      "p90_well_rmse": 19.180847006607266
+    },
+    "alpha=0.4": {
+      "max_well_rmse": 64.6281207595768,
+      "median_well_rmse": 8.706744619040878,
+      "overall_bias": -0.9549415454068961,
+      "overall_mae": 9.192320530076863,
+      "overall_rmse": 13.18391967870347,
+      "p90_well_rmse": 18.114181020414684
+    },
+    "alpha=0.5": {
+      "max_well_rmse": 63.1610767273519,
+      "median_well_rmse": 8.397112792093077,
+      "overall_bias": -0.7946805360798292,
+      "overall_mae": 8.816874991817688,
+      "overall_rmse": 12.659334473615967,
+      "p90_well_rmse": 17.577582801936977
+    },
+    "alpha=0.6": {
+      "max_well_rmse": 61.710354250988814,
+      "median_well_rmse": 8.14226970746559,
+      "overall_bias": -0.6344195267527623,
+      "overall_mae": 8.506224124119841,
+      "overall_rmse": 12.215145315236322,
+      "p90_well_rmse": 16.886775986730875
+    },
+    "alpha=0.7": {
+      "max_well_rmse": 60.27713180126223,
+      "median_well_rmse": 7.9507667525848165,
+      "overall_bias": -0.47415851742569526,
+      "overall_mae": 8.267086839603312,
+      "overall_rmse": 11.860388499829147,
+      "p90_well_rmse": 16.325431637857168
+    },
+    "alpha=0.8": {
+      "max_well_rmse": 58.862687694082155,
+      "median_well_rmse": 7.886677440442124,
+      "overall_bias": -0.31389750809862815,
+      "overall_mae": 8.10622297854368,
+      "overall_rmse": 11.603269806330468,
+      "p90_well_rmse": 16.005458570802677
+    },
+    "alpha=0.9": {
+      "max_well_rmse": 57.468408494889346,
+      "median_well_rmse": 7.808439050743273,
+      "overall_bias": -0.15363649877156113,
+      "overall_mae": 8.026780244267249,
+      "overall_rmse": 11.450368534121615,
+      "p90_well_rmse": 15.684313620150984
+    }
+  },
+  "hard_cap": {
+    "band=15.0": {
+      "max_well_rmse": 60.940643285275804,
+      "median_well_rmse": 7.9307617494103075,
+      "overall_bias": -0.35474774057630737,
+      "overall_mae": 8.304846836854024,
+      "overall_rmse": 12.091029700124468,
+      "p90_well_rmse": 16.72304584083151
+    },
+    "band=20.0": {
+      "max_well_rmse": 58.980070048226374,
+      "median_well_rmse": 7.84368023453051,
+      "overall_bias": -0.1758965466094909,
+      "overall_mae": 8.145184294532031,
+      "overall_rmse": 11.722585848686299,
+      "p90_well_rmse": 16.298269240842394
+    },
+    "band=25.0": {
+      "max_well_rmse": 57.45491530326542,
+      "median_well_rmse": 7.830526589034791,
+      "overall_bias": -0.0839964343069875,
+      "overall_mae": 8.078057244200373,
+      "overall_rmse": 11.532519261568007,
+      "p90_well_rmse": 16.182177529978716
+    },
+    "band=30.0": {
+      "max_well_rmse": 56.534696095061086,
+      "median_well_rmse": 7.7943738341771915,
+      "overall_bias": -0.0502579752494712,
+      "overall_mae": 8.050108431022176,
+      "overall_rmse": 11.4359054706298,
+      "p90_well_rmse": 15.994423199760242
+    },
+    "band=40.0": {
+      "max_well_rmse": 56.09579783976689,
+      "median_well_rmse": 7.838418884462673,
+      "overall_bias": -0.020182127972815884,
+      "overall_mae": 8.024335730926664,
+      "overall_rmse": 11.365426264828248,
+      "p90_well_rmse": 15.994423199760242
+    },
+    "band=60.0": {
+      "max_well_rmse": 56.09579783976689,
+      "median_well_rmse": 7.830526589034791,
+      "overall_bias": 0.005243804224685627,
+      "overall_mae": 8.031365293249515,
+      "overall_rmse": 11.399118041495083,
+      "p90_well_rmse": 15.994423199760242
+    }
+  }
+}

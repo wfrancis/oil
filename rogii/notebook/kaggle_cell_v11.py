@@ -98,8 +98,8 @@ ENABLE_BEAM = True
 EWM_SPAN = 4.0
 USE_GPU = True
 
-SHRINK_ALPHA = 0.85
-HARD_CAP_BAND = 50.0
+SHRINK_ALPHA = 1.0     # disabled per v9 OOF shrinkage sweep
+HARD_CAP_BAND = 40.0   # ft; calibrated to ~p99 eval_offset_from_anchor
 
 MLP_NUM_FREQS = 8
 MLP_HIDDEN = 256

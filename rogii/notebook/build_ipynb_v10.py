@@ -161,14 +161,15 @@ ENABLE_BEAM = True
 EWM_SPAN = 4.0
 USE_GPU = True
 
-# Anchor-shrinkage config (the v10 lever).
-# alpha < 1 pulls predicted delta toward 0 (=toward anchor). Calibrate
-# locally via rogii/bench/anchor_shrinkage_score.py on v9 OOF; default
-# 0.85 is conservative (keep most of the model's signal, damp the
-# catastrophic tail). Optionally hard-cap at +-band ft for an extra
-# safety net.
-SHRINK_ALPHA = 0.85
-HARD_CAP_BAND = 50.0   # ft; only kicks in past p99 of typical eval offsets
+# Anchor-shrinkage config (CALIBRATED on v9 OOF, 2026-05-07):
+# Sweep showed multiplicative shrinkage HURTS overall RMSE at every
+# alpha < 1.0 (the GBM already absorbed most of the catastrophic-tail
+# drift; further shrinkage damages legitimate motion predictions).
+# Hard cap at +-40 ft is the only intervention that improves overall
+# RMSE (-0.04) without raising max-well-RMSE. p99 of population
+# eval_offset_from_anchor is 37.7 ft so 40 ft exactly clips the tail.
+SHRINK_ALPHA = 1.0     # disabled (calibrated on v9 OOF)
+HARD_CAP_BAND = 40.0   # ft; clips ~p99 of legitimate eval motion
 
 # Neural-ANCC config (matches the OOF-validated MLP+PE-L8 multi-output)
 # v10: 3-seed ensemble at imputer level cuts worst-well RMSE by 18 ft
