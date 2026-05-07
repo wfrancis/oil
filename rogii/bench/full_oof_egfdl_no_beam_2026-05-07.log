@@ -1,0 +1,35 @@
+using 773 train wells
+>> build PLANE-FIT formation imputer
+   765 wells, 4.2s
+>> build row-level KNN imputer
+   5,040,554 rows, 5.1s
+>> build train features
+  train: 100/773
+  train: 200/773
+  train: 300/773
+  train: 400/773
+  train: 500/773
+  train: 600/773
+  train: 700/773
+   train shape: (3783989, 132), 2041.5s
+   #features: 129
+   LGB seed=42 fold 0: rmse=13.5508  best_iter=861
+   LGB seed=42 fold 1: rmse=11.3755  best_iter=651
+   LGB seed=42 fold 2: rmse=11.2171  best_iter=1141
+   LGB seed=42 fold 3: rmse=12.3106  best_iter=676
+   LGB seed=42 fold 4: rmse=11.4712  best_iter=31
+   LGB seed=42: OOF rmse = 12.0281
+
+   per-well stats: median rmse=8.157  mean rmse=9.706  max rmse=56.131  p90 rmse=16.638
+
+   worst 10 wells:
+     389ae58f  rmse=56.131  bias=-54.081  rows=6463
+     1b1eba53  rmse=55.150  bias=-51.458  rows=4655
+     fb03ae90  rmse=51.128  bias=+49.438  rows=6431
+     86454a6f  rmse=48.154  bias=-42.210  rows=7964
+     896d15b9  rmse=46.996  bias=-39.902  rows=4279
+     a959858c  rmse=45.513  bias=-43.031  rows=4404
+     91b301ce  rmse=38.548  bias=+24.678  rows=6570
+     ba48188d  rmse=35.930  bias=+26.029  rows=4166
+     5f4d2a52  rmse=32.680  bias=-25.572  rows=5225
+     521a7819  rmse=32.610  bias=+29.295  rows=5200
