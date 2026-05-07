@@ -35,7 +35,12 @@ from scipy.spatial import cKDTree
 FORMATIONS: tuple[str, ...] = ("ANCC", "ASTNU", "ASTNL", "EGFDU", "EGFDL", "BUDA")
 PLANE_K_DEFAULT = 10
 ROW_K_DEFAULT = 20
-ROW_NQ_DEFAULT = 12_000
+# konbu17 default n_q=12000. Empirical well sizes: median 6576, p90 8056,
+# p99 11032, max 12141. After self-exclusion we need n_q > self_well_rows
+# + K=20. 8000 gives us safety for ~85% of wells; the remaining ~15%
+# fall back to the global formation mean for sparse-neighbour rows.
+# Per-well row KNN cost is O(n_query * n_q); 12k -> 8k is a 1.5x speedup.
+ROW_NQ_DEFAULT = 8_000
 
 
 # ---------------------------------------------------------------------------
@@ -535,8 +540,11 @@ def build_hidden_features(
         wsum > 0, (T * W).sum(axis=1) / np.maximum(wsum, 1e-12), np.nan
     )
 
-    # ---- assemble feature DataFrame -------------------------------------
-    feats = pd.DataFrame({
+    # ---- assemble feature dict (build once, DataFrame-ify at end) -------
+    # Pandas DataFrames suffer O(N^2) memory copies when many columns are
+    # added one at a time on a wide frame ("highly fragmented" warning).
+    # We collect everything in a dict and call pd.DataFrame ONCE at the end.
+    fd: dict = {
         "well": wid,
         "prediction_id": [f"{wid}_{i}" for i in hidden.index],
         "row_idx": hidden.index.to_numpy(dtype=np.int32),
@@ -584,9 +592,9 @@ def build_hidden_features(
         "beam_cons_delta": (beam_cons - np.float32(last_known_tvt)).astype(np.float32),
         "beam_loose_delta": (beam_loose - np.float32(last_known_tvt)).astype(np.float32),
         "beam_gap": (beam_loose - beam_cons).astype(np.float32),
-    })
+    }
     for name, vals in offset_diffs.items():
-        feats[name] = vals.astype(np.float32)
+        fd[name] = vals.astype(np.float32)
 
     # NCC-style typewell shift estimate
     slc = (tw_tvt >= last_known_tvt - 40.0) & (tw_tvt <= last_known_tvt + 40.0)
@@ -596,75 +604,68 @@ def build_hidden_features(
         d = np.abs(gr_ok[:, None] - gr_s[None, :])
         nn = np.argmin(d, axis=1)
         matched = tvt_s[nn]
-        feats["ncc_med_shift_well"] = np.float32(np.median(matched) - last_known_tvt)
-        feats["ncc_mean_shift_well"] = np.float32(np.mean(matched) - last_known_tvt)
+        fd["ncc_med_shift_well"] = np.float32(np.median(matched) - last_known_tvt)
+        fd["ncc_mean_shift_well"] = np.float32(np.mean(matched) - last_known_tvt)
     else:
-        feats["ncc_med_shift_well"] = np.float32(0.0)
-        feats["ncc_mean_shift_well"] = np.float32(0.0)
+        fd["ncc_med_shift_well"] = np.float32(0.0)
+        fd["ncc_mean_shift_well"] = np.float32(0.0)
 
     fft_freq, fft_pow = _gr_fft_features(hidden_gr)
-    feats["gr_fft_dom_freq"] = np.float32(fft_freq)
-    feats["gr_fft_dom_power"] = np.float32(fft_pow)
+    fd["gr_fft_dom_freq"] = np.float32(fft_freq)
+    fd["gr_fft_dom_power"] = np.float32(fft_pow)
 
     if len(tw_tvt):
         tmin, tmax = float(tw_tvt.min()), float(tw_tvt.max())
-        feats["anchor_t_pos"] = np.float32((last_known_tvt - tmin) / max(tmax - tmin, 1e-3))
+        fd["anchor_t_pos"] = np.float32((last_known_tvt - tmin) / max(tmax - tmin, 1e-3))
     else:
-        feats["anchor_t_pos"] = np.float32(0.0)
-    feats["spatial_knn_delta"] = np.float32(0.0)
+        fd["anchor_t_pos"] = np.float32(0.0)
+    fd["spatial_knn_delta"] = np.float32(0.0)
 
     # Plane formation features (anchored deltas + dz)
     for fi, fname in enumerate(formations):
-        feats[f"fk_{fname}"] = plane_post[:, fi].astype(np.float32)
-        feats[f"fk_{fname}_dz"] = (z_post - plane_post[:, fi]).astype(np.float32)
-        feats[f"fk_b_{fname}"] = np.float32(b_plane_per_F[fname])
-        feats[f"fk_b_huber_{fname}"] = np.float32(b_plane_huber_per_F[fname])
-        # Per-formation closed-form delta from anchor:
+        fd[f"fk_{fname}"] = plane_post[:, fi].astype(np.float32)
+        fd[f"fk_{fname}_dz"] = (z_post - plane_post[:, fi]).astype(np.float32)
+        fd[f"fk_b_{fname}"] = np.float32(b_plane_per_F[fname])
+        fd[f"fk_b_huber_{fname}"] = np.float32(b_plane_huber_per_F[fname])
         tvt_F = -z_post + plane_post[:, fi] + b_plane_per_F[fname]
-        feats[f"fk_tvt_formula_{fname}"] = (tvt_F - np.float32(last_known_tvt)).astype(np.float32)
-    feats["fk_min_dist"] = plane_min_dist_post.astype(np.float32)
-    feats["fk_tvt_formula"] = (
+        fd[f"fk_tvt_formula_{fname}"] = (tvt_F - np.float32(last_known_tvt)).astype(np.float32)
+    fd["fk_min_dist"] = plane_min_dist_post.astype(np.float32)
+    fd["fk_tvt_formula"] = (
         tvt_formula_plane_primary - np.float32(last_known_tvt)
     ).astype(np.float32)
 
     # Row-level features (per formation), anchored deltas
     for fi, fname in enumerate(formations):
-        feats[f"knn_row_{fname}"] = row_preds_post[:, fi].astype(np.float32)
-        feats[f"knn_row_{fname}_dz"] = (z_post - row_preds_post[:, fi]).astype(np.float32)
-        feats[f"knn_row_{fname}_std"] = row_stds_post[:, fi].astype(np.float32)
-        feats[f"knn_row_b_{fname}"] = np.float32(b_row_per_F[fname])
-        feats[f"knn_row_b_huber_{fname}"] = np.float32(b_row_huber_per_F[fname])
+        fd[f"knn_row_{fname}"] = row_preds_post[:, fi].astype(np.float32)
+        fd[f"knn_row_{fname}_dz"] = (z_post - row_preds_post[:, fi]).astype(np.float32)
+        fd[f"knn_row_{fname}_std"] = row_stds_post[:, fi].astype(np.float32)
+        fd[f"knn_row_b_{fname}"] = np.float32(b_row_per_F[fname])
+        fd[f"knn_row_b_huber_{fname}"] = np.float32(b_row_huber_per_F[fname])
         tvt_F = -z_post + row_preds_post[:, fi] + b_row_per_F[fname]
-        feats[f"knn_row_tvt_pred_delta_{fname}"] = (
+        fd[f"knn_row_tvt_pred_delta_{fname}"] = (
             tvt_F - np.float32(last_known_tvt)
         ).astype(np.float32)
-    feats["knn_row_dist"] = row_min_dist_post.astype(np.float32)
-    feats["knn_row_tvt_pred_delta"] = (
+    fd["knn_row_dist"] = row_min_dist_post.astype(np.float32)
+    fd["knn_row_tvt_pred_delta"] = (
         tvt_formula_row_primary - np.float32(last_known_tvt)
     ).astype(np.float32)
 
-    # Multi-formation ensemble (delta-anchored)
-    feats["knn_row_tvt_ensemble_delta"] = (
+    fd["knn_row_tvt_ensemble_delta"] = (
         tvt_formula_row_ensemble - np.float32(last_known_tvt)
     ).astype(np.float32)
 
-    # Cross-checks
-    feats["fk_vs_row_primary_diff"] = (
+    fd["fk_vs_row_primary_diff"] = (
         plane_post[:, f_idx_primary] - row_preds_post[:, f_idx_primary]
     ).astype(np.float32)
-    feats["fk_vs_row_primary_tvt_diff"] = (
+    fd["fk_vs_row_primary_tvt_diff"] = (
         tvt_formula_plane_primary - tvt_formula_row_primary
     ).astype(np.float32)
 
     # ------------------------------------------------------------------
-    # v9: MLP global ANCC field features (optional). The 5-fold OOF on
-    # 765 wells / 5M rows showed MLP+PE-L8 multi-output reduces
-    # catastrophic-tail wells (RMSE>60ft) from 46 (KNN) to 11 while
-    # losing slightly on the typical median. We expose both KNN and MLP
-    # predictions and let the GBM gate by knn_row_dist.
+    # v9 MLP-global-ANCC features (optional)
     # ------------------------------------------------------------------
     if mlp_imputer is not None:
-        mlp_preds_full = mlp_imputer.impute(xy_full)            # (N, F)
+        mlp_preds_full = mlp_imputer.impute(xy_full)
         mlp_preds_post = mlp_preds_full[mask_start:]
         b_mlp_per_F: dict[str, float] = {}
         b_mlp_huber_per_F: dict[str, float] = {}
@@ -672,36 +673,37 @@ def build_hidden_features(
             per_row = known_tvt + known_z - mlp_preds_full[:mask_start, fi]
             b_mlp_per_F[fname] = median_b(per_row)
             b_mlp_huber_per_F[fname] = huber_b(per_row)
-        # Per-formation MLP features
         for fi, fname in enumerate(formations):
-            feats[f"mlp_{fname}"] = mlp_preds_post[:, fi].astype(np.float32)
-            feats[f"mlp_{fname}_dz"] = (z_post - mlp_preds_post[:, fi]).astype(np.float32)
-            feats[f"mlp_b_{fname}"] = np.float32(b_mlp_per_F[fname])
-            feats[f"mlp_b_huber_{fname}"] = np.float32(b_mlp_huber_per_F[fname])
+            fd[f"mlp_{fname}"] = mlp_preds_post[:, fi].astype(np.float32)
+            fd[f"mlp_{fname}_dz"] = (z_post - mlp_preds_post[:, fi]).astype(np.float32)
+            fd[f"mlp_b_{fname}"] = np.float32(b_mlp_per_F[fname])
+            fd[f"mlp_b_huber_{fname}"] = np.float32(b_mlp_huber_per_F[fname])
             tvt_F_mlp = -z_post + mlp_preds_post[:, fi] + b_mlp_per_F[fname]
-            feats[f"mlp_tvt_formula_{fname}"] = (
+            fd[f"mlp_tvt_formula_{fname}"] = (
                 tvt_F_mlp - np.float32(last_known_tvt)
             ).astype(np.float32)
-        # Primary-formation deltas + KNN-vs-MLP disagreement (gate inputs)
         tvt_formula_mlp_primary = (
             -z_post + mlp_preds_post[:, f_idx_primary] + b_mlp_per_F[primary_formation]
         )
-        feats["mlp_tvt_formula"] = (
+        fd["mlp_tvt_formula"] = (
             tvt_formula_mlp_primary - np.float32(last_known_tvt)
         ).astype(np.float32)
-        feats["mlp_vs_row_primary_diff"] = (
+        fd["mlp_vs_row_primary_diff"] = (
             mlp_preds_post[:, f_idx_primary] - row_preds_post[:, f_idx_primary]
         ).astype(np.float32)
-        feats["mlp_vs_row_primary_tvt_diff"] = (
+        fd["mlp_vs_row_primary_tvt_diff"] = (
             tvt_formula_mlp_primary - tvt_formula_row_primary
         ).astype(np.float32)
-        feats["mlp_vs_plane_primary_diff"] = (
+        fd["mlp_vs_plane_primary_diff"] = (
             mlp_preds_post[:, f_idx_primary] - plane_post[:, f_idx_primary]
         ).astype(np.float32)
 
     if is_train:
-        feats["target"] = (hidden["TVT"].to_numpy(dtype=np.float32)
-                           - np.float32(last_known_tvt)).astype(np.float32)
+        fd["target"] = (hidden["TVT"].to_numpy(dtype=np.float32)
+                        - np.float32(last_known_tvt)).astype(np.float32)
+
+    # Single DataFrame allocation — no fragmentation.
+    feats = pd.DataFrame(fd)
     return feats
 
 

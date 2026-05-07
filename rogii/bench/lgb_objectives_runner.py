@@ -32,11 +32,35 @@ from feature_builder import FormationPlaneKNN, RowKNN, build_dataset  # noqa: E4
 
 # Subset size for runtime budget. The dominant cost is the per-well
 # RowKNN.impute (cKDTree.query with n_q=12_000 returning 6k+ neighbors per
-# row), which on M1 Pro is ~2.5 s/well for the v8/v9 feature stack. The
-# user asked for under 30 minutes total; with ~5 objectives x 5 folds of
-# LGB training on top, 150 wells is the safe budget.
-N_WELLS_SUBSET = 150
+# row), which on M1 Pro is ~2.5 s/well for the v8/v9 feature stack — and
+# is much SLOWER under memory pressure (other Python processes running
+# concurrently can knock the machine into swap). We cache features to a
+# parquet so the slow build only runs once even if we re-run the script.
+#
+# We use TWO knobs:
+# - N_WELLS_KNN_FIT: how many wells the KNN tree is built from. Too small
+#   (<20k tree points) and the n_q=12_000 query becomes nearly exhaustive
+#   and SLOWER per well than a properly populated tree. ~200 wells gives a
+#   tree of 1.3M+ points which is fast.
+# - N_WELLS_SUBSET: how many wells we iterate `build_dataset` over and use
+#   for the actual OOF.  Total feature-build time scales with this knob.
+N_WELLS_KNN_FIT = 200
+N_WELLS_SUBSET = 50
 SUBSET_SEED = 42
+
+# The 10 worst wells from the v9 baseline run (full_oof_egfdl_no_beam_…log).
+# We deliberately include them in the OOF subset so the comparison can
+# measure whether alt objectives help the CATASTROPHIC tail — random 50
+# wells would likely miss them (they are <2% of train) and we'd just be
+# measuring objective behaviour on the "easy" mass.
+V9_WORST_WELLS = (
+    "389ae58f", "1b1eba53", "fb03ae90", "86454a6f", "896d15b9",
+    "a959858c", "91b301ce", "ba48188d", "5f4d2a52", "521a7819",
+)
+
+# Persistent cache for the built feature matrix. If present, skip the
+# expensive build and load directly. Bust by deleting the file.
+FEATURE_CACHE = ROOT / "bench" / "_lgb_objectives_features.parquet"
 
 # All five objectives we want to compare. Each entry overrides keys in
 # LGB_PARAMS_BASE. We pick metric="rmse" everywhere so early stopping is
@@ -207,53 +231,101 @@ def train_objective(
 
 def main() -> int:
     t_overall = time.perf_counter()
-    train_dir = ROOT / "data" / "competition" / "train"
-    paths_all = sorted(train_dir.glob("*__horizontal_well.csv"))
 
-    # Deterministic 300-well subsample.
-    rng = np.random.default_rng(SUBSET_SEED)
-    idx = rng.choice(len(paths_all), size=N_WELLS_SUBSET, replace=False)
-    paths = [paths_all[i] for i in sorted(idx)]
-    print(
-        f">> Subset: {len(paths)}/{len(paths_all)} train wells, seed={SUBSET_SEED}",
-        flush=True,
-    )
+    if FEATURE_CACHE.exists():
+        print(f">> Loading cached features from {FEATURE_CACHE.name}", flush=True)
+        t0 = time.perf_counter()
+        train_df = pl.read_parquet(FEATURE_CACHE)
+        print(
+            f"   loaded: shape={train_df.shape}, "
+            f"{time.perf_counter() - t0:.1f}s",
+            flush=True,
+        )
+    else:
+        train_dir = ROOT / "data" / "competition" / "train"
+        paths_all = sorted(train_dir.glob("*__horizontal_well.csv"))
 
-    t0 = time.perf_counter()
-    plane = FormationPlaneKNN.fit(paths)
-    print(
-        f"   plane fit: {len(plane.df)} wells in {time.perf_counter() - t0:.1f}s",
-        flush=True,
-    )
+        # Deterministic well-id selection. The KNN tree is built from a
+        # 200-well superset that INCLUDES the 10 worst v9 wells (so the OOF
+        # set can use them) plus a random 190 from the rest.
+        # The OOF subset is the 10 worst wells + a random 40 to fill out.
+        all_wids = [p.stem.replace("__horizontal_well", "") for p in paths_all]
+        worst_set = set(V9_WORST_WELLS)
+        worst_paths = [
+            paths_all[i] for i, w in enumerate(all_wids) if w in worst_set
+        ]
+        non_worst_paths = [
+            paths_all[i] for i, w in enumerate(all_wids) if w not in worst_set
+        ]
+        rng = np.random.default_rng(SUBSET_SEED)
+        # KNN superset: all worst wells + (KNN_FIT - len(worst)) random
+        n_extra_for_knn = N_WELLS_KNN_FIT - len(worst_paths)
+        knn_extra_idx = rng.choice(
+            len(non_worst_paths), size=n_extra_for_knn, replace=False
+        )
+        paths_knn = sorted(
+            worst_paths + [non_worst_paths[i] for i in knn_extra_idx],
+            key=lambda p: p.stem,
+        )
+        # OOF subset: all worst + (SUBSET - len(worst)) random non-worst.
+        n_extra_for_oof = N_WELLS_SUBSET - len(worst_paths)
+        oof_extra_idx = rng.choice(
+            len(non_worst_paths), size=n_extra_for_oof, replace=False
+        )
+        paths = sorted(
+            worst_paths + [non_worst_paths[i] for i in oof_extra_idx],
+            key=lambda p: p.stem,
+        )
+        print(
+            f"   OOF includes {len(worst_paths)} known-worst v9 wells",
+            flush=True,
+        )
 
-    t0 = time.perf_counter()
-    row = RowKNN.fit(paths)
-    print(
-        f"   row KNN fit: {len(row.targets):,} rows in "
-        f"{time.perf_counter() - t0:.1f}s",
-        flush=True,
-    )
+        print(
+            f">> KNN fit on {len(paths_knn)} wells; "
+            f"OOF over {len(paths)} wells",
+            flush=True,
+        )
 
-    print(
-        ">> Building train features (KNN + plane, no MLP, no beam) ...",
-        flush=True,
-    )
-    t0 = time.perf_counter()
-    train_pdf = build_dataset(
-        paths, plane, row, is_train=True, mlp_imputer=None,
-        primary_formation="ANCC", enable_beam=False, label="train",
-        progress_every=25,
-    )
-    print(
-        f"   train shape: {train_pdf.shape}, {time.perf_counter() - t0:.1f}s",
-        flush=True,
-    )
-    if train_pdf.empty:
-        print("FATAL: empty train_df", flush=True)
-        return 1
+        t0 = time.perf_counter()
+        plane = FormationPlaneKNN.fit(paths_knn)
+        print(
+            f"   plane fit: {len(plane.df)} wells in "
+            f"{time.perf_counter() - t0:.1f}s",
+            flush=True,
+        )
 
-    # Convert to polars for downstream groupby + slicing speed.
-    train_df = pl.from_pandas(train_pdf)
+        t0 = time.perf_counter()
+        row = RowKNN.fit(paths_knn)
+        print(
+            f"   row KNN fit: {len(row.targets):,} rows in "
+            f"{time.perf_counter() - t0:.1f}s",
+            flush=True,
+        )
+
+        print(
+            ">> Building train features (KNN + plane, no MLP, no beam) ...",
+            flush=True,
+        )
+        t0 = time.perf_counter()
+        train_pdf = build_dataset(
+            paths, plane, row, is_train=True, mlp_imputer=None,
+            primary_formation="ANCC", enable_beam=False, label="train",
+            progress_every=5,
+        )
+        print(
+            f"   train shape: {train_pdf.shape}, "
+            f"{time.perf_counter() - t0:.1f}s",
+            flush=True,
+        )
+        if train_pdf.empty:
+            print("FATAL: empty train_df", flush=True)
+            return 1
+
+        # Convert to polars and persist.
+        train_df = pl.from_pandas(train_pdf)
+        train_df.write_parquet(FEATURE_CACHE)
+        print(f"   saved features to {FEATURE_CACHE}", flush=True)
     feature_cols = [
         c for c in train_df.columns if c not in {"well", "prediction_id", "target"}
     ]

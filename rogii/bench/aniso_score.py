@@ -227,7 +227,12 @@ def main() -> int:
         # we re-fit per variant — fit time is small (~5s) compared to query.
         xy_train = xy_all[tr].astype(np.float64)
         ancc_train = targets_all[tr, f_idx_ancc].astype(np.float64)
-        wids_train_int = np.zeros(len(tr), dtype=np.int32)  # not used internally
+        # well_ids: integer-encoded train-fold well IDs for L_norm centroid
+        # estimation (inter-well spacing).
+        wids_train = wids_all[tr]
+        unique_train = sorted(set(wids_train.tolist()))
+        widx = {w: i for i, w in enumerate(unique_train)}
+        wids_train_int = np.array([widx[w] for w in wids_train], dtype=np.int32)
 
         # Estimate anisotropy once on train fold (shared across variants)
         t0 = time.perf_counter()

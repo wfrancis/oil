@@ -370,11 +370,9 @@ def main() -> int:
     print(f">> using {len(sub)} of {len(paths)} wells (seed={args.seed})", flush=True)
 
     cache_path = Path(args.cache)
-    if cache_path.exists():
-        # Cache invalidates if subset changes — we encode subset hash in name
-        pass
     sig = f".n{args.n_wells}.s{args.seed}"
-    cache_path = cache_path.with_suffix(sig + ".parquet")
+    if not str(cache_path).endswith(sig + ".parquet"):
+        cache_path = cache_path.with_suffix(sig + ".parquet")
 
     t_overall = time.perf_counter()
     feats = build_features_cached(sub, cache_path)

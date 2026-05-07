@@ -89,19 +89,24 @@ def build_features(
     mlp_seeds: list[int] | None = None,
     cache_path: Path = FEATURES_CACHE,
     force_rebuild: bool = False,
+    no_mlp: bool = False,
 ) -> pd.DataFrame:
     """Build (or load cached) train DataFrame with v9 features.
 
     If ``mlp_seeds`` is None, fits a single MLP with seed=42 (matches the
     inline kernel). Otherwise fits N MLPs and averages their predictions
     inside a wrapper-MLP so all downstream features see a consensus surface.
+    If ``no_mlp`` is True, skips MLP entirely (v8 features only) — used as
+    a fast fallback when the v9 OOF runner is too slow.
     """
     if cache_path.exists() and not force_rebuild:
         print(f">> Loading cached features from {cache_path}", flush=True)
         return pd.read_pickle(cache_path)
 
     paths = _train_paths()
-    print(f">> Building v9 features over {len(paths)} train wells", flush=True)
+    label = "v8 (no MLP)" if no_mlp else "v9"
+    print(f">> Building {label} features over {len(paths)} train wells",
+          flush=True)
     t0 = time.perf_counter()
     plane = FormationPlaneKNN.fit(paths)
     print(f"   plane: {len(plane.df)} wells in {time.perf_counter() - t0:.1f}s",
@@ -111,7 +116,9 @@ def build_features(
     print(f"   row KNN: {len(row.targets):,} rows in "
           f"{time.perf_counter() - t0:.1f}s", flush=True)
 
-    if mlp_seeds is None or len(mlp_seeds) == 1:
+    if no_mlp:
+        mlp = None
+    elif mlp_seeds is None or len(mlp_seeds) == 1:
         seed = 42 if mlp_seeds is None else mlp_seeds[0]
         t0 = time.perf_counter()
         mlp = MLPAnccImputer.fit(
@@ -152,22 +159,26 @@ def build_features(
 class _AveragedMLPImputer:
     """Drop-in replacement for MLPAnccImputer that averages multiple AnccNets.
 
-    Implements the (.net.predict_xy) surface used by build_dataset so each
-    call returns a mean across the constituent nets.
+    feature_builder calls ``mlp_imputer.impute(xy)`` which delegates to
+    ``self.net.predict(xy)``. We expose .impute() returning the mean of all
+    nested nets' .predict() outputs.
     """
 
     def __init__(self, nets, formations=FORMATIONS):
         self.nets = nets
         self.formations = formations
-        # Provide a wrapper net with a predict_xy method that averages.
+        # For symmetry with MLPAnccImputer, expose a wrapper net with .predict
         outer = self
 
         class _AvgNet:
-            def predict_xy(self_inner, xy):
-                preds = [n.predict_xy(xy) for n in outer.nets]
+            def predict(self_inner, xy):
+                preds = [n.predict(xy) for n in outer.nets]
                 return np.mean(preds, axis=0).astype(np.float32)
 
         self.net = _AvgNet()
+
+    def impute(self, xy_q: np.ndarray) -> np.ndarray:
+        return self.net.predict(xy_q)
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +279,8 @@ def main() -> int:
                     help="Rebuild feature cache even if it exists.")
     ap.add_argument("--mlp-seeds", type=int, nargs="+", default=MLP_SEEDS,
                     help="MLP seeds for stage 2.")
+    ap.add_argument("--no-mlp", action="store_true",
+                    help="Use v8 features only (no MLP) — fast fallback.")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
@@ -275,10 +288,17 @@ def main() -> int:
 
     # ---- Stage 1 ---------------------------------------------------------
     print("=" * 70)
-    print("Stage 1: LGB multi-seed (single MLP=42)")
+    if args.no_mlp:
+        print("Stage 1: LGB multi-seed (v8 features, NO MLP)")
+        cache = Path("/tmp/v8_multiseed_features.pkl")
+    else:
+        print("Stage 1: LGB multi-seed (single MLP=42)")
+        cache = FEATURES_CACHE
     print("=" * 70, flush=True)
     train_df = build_features(mlp_seeds=None,
-                              force_rebuild=args.force_rebuild)
+                              cache_path=cache,
+                              force_rebuild=args.force_rebuild,
+                              no_mlp=args.no_mlp)
     print(f"   features columns: {train_df.shape[1]}, "
           f"rows: {train_df.shape[0]:,}", flush=True)
 

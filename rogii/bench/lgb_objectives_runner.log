@@ -1,4 +1,5 @@
->> Subset: 150/773 train wells, seed=42
-   plane fit: 149 wells in 2.2s
-   row KNN fit: 986,714 rows in 4.2s
+   OOF includes 10 known-worst v9 wells
+>> KNN fit on 200 wells; OOF over 50 wells
+   plane fit: 198 wells in 5.8s
+   row KNN fit: 1,319,081 rows in 4.9s
 >> Building train features (KNN + plane, no MLP, no beam) ...

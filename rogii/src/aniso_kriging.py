@@ -44,78 +44,104 @@ def estimate_anisotropy_from_field(
     xy: np.ndarray,
     z: np.ndarray,
     *,
-    radius_quantile: float = 0.05,
+    cell_size: float | None = None,
+    n_cells_per_axis: int = 60,
     eps: float = 1e-9,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Estimate anisotropy axis & length scales from a noisy spatial field.
 
-    Idea: gradients of the field point in the high-variation direction.
-    PCA on the local gradient distribution yields the anisotropy ellipse.
+    Idea: gradients of the spatial trend in z(x, y) reveal the anisotropy.
+    Naively fitting `z ~ a + bx + cy` on raw rows fails because well
+    trajectories sample the same XY very densely along the trajectory,
+    and the local linear fit picks up intra-track row-level noise rather
+    than the broad spatial gradient. We therefore aggregate to a coarse
+    spatial grid first (mean z per cell), then fit local linear gradients
+    over moderate-radius neighborhoods of cell centroids.
 
     Parameters
     ----------
     xy : (N, 2) float64
     z  : (N,)   float64       sampled values of the surface at xy
-    radius_quantile : neighborhood radius for local-gradient estimate as a
-        quantile of the pairwise-NN distance distribution.
+    cell_size : explicit cell size in raw XY units (e.g. ft). If None,
+        bbox_span / n_cells_per_axis is used.
+    n_cells_per_axis : grid resolution when cell_size is None.
 
     Returns
     -------
-    R : (2, 2) rotation matrix; columns are anisotropy axes
-    sigma : (2,) length scales (large axis first)
+    R : (2, 2) rotation matrix; columns = (high-gradient, along-strike) axes
+    sigma : (2,) length scales (along-strike axis is the larger one)
     """
     if xy.shape[0] != z.shape[0] or xy.shape[1] != 2:
         raise ValueError("xy must be (N,2), z must be (N,)")
 
-    tree = cKDTree(xy)
-    nn_d, _ = tree.query(xy, k=2)
-    radius = float(np.quantile(nn_d[:, 1], radius_quantile))
-    radius = max(radius, 50.0)  # guard against pathological clusters
+    bbox_min = xy.min(axis=0)
+    bbox_max = xy.max(axis=0)
+    bbox_span = np.maximum(bbox_max - bbox_min, 1.0)
+    if cell_size is None:
+        cell_size = float(bbox_span.mean()) / float(n_cells_per_axis)
+    cell_size = max(cell_size, 1e-6)
 
-    # Estimate gradients via local linear fit: solve z ~ a + bx + cy on
-    # neighbors. Sub-sample queries to avoid 5M solves.
-    n_sub = min(20_000, xy.shape[0])
-    rng = np.random.default_rng(20260507)
-    idx_sub = rng.choice(xy.shape[0], n_sub, replace=False)
+    cell_idx = np.floor((xy - bbox_min) / cell_size).astype(np.int64)
+    keys = cell_idx[:, 0] * (cell_idx[:, 1].max() + 2) + cell_idx[:, 1]
+    # Group by cell, take mean(z) and mean(xy)
+    order = np.argsort(keys, kind="stable")
+    keys_s = keys[order]
+    xy_s = xy[order]
+    z_s = z[order]
+    boundaries = np.flatnonzero(np.diff(keys_s) != 0) + 1
+    starts = np.concatenate([[0], boundaries])
+    ends = np.concatenate([boundaries, [len(keys_s)]])
 
-    grad_xy = np.zeros((n_sub, 2), dtype=np.float64)
-    for k, i in enumerate(idx_sub):
-        nbr_idx = tree.query_ball_point(xy[i], r=radius)
-        if len(nbr_idx) < 6:
-            grad_xy[k] = np.nan
-            continue
-        nbr = np.asarray(nbr_idx, dtype=np.int64)
-        A = np.column_stack([np.ones(nbr.size), xy[nbr, 0] - xy[i, 0], xy[nbr, 1] - xy[i, 1]])
-        b = z[nbr]
-        try:
-            coef, *_ = np.linalg.lstsq(A, b, rcond=None)
-            grad_xy[k] = coef[1:3]
-        except np.linalg.LinAlgError:
-            grad_xy[k] = np.nan
+    n_cells = len(starts)
+    cell_xy = np.zeros((n_cells, 2), dtype=np.float64)
+    cell_z = np.zeros(n_cells, dtype=np.float64)
+    for k in range(n_cells):
+        s, e = starts[k], ends[k]
+        cell_xy[k] = xy_s[s:e].mean(axis=0)
+        cell_z[k] = z_s[s:e].mean()
 
-    grad_xy = grad_xy[np.isfinite(grad_xy).all(axis=1)]
-    if grad_xy.shape[0] < 100:
-        # Fallback: identity (isotropic)
+    if n_cells < 20:
         return np.eye(2), np.array([1.0, 1.0])
 
-    # Robust covariance via MAD-style scaling
+    # Local-gradient radius = a few cell sizes
+    radius = 3.0 * cell_size
+    tree = cKDTree(cell_xy)
+
+    grad_xy = np.zeros((n_cells, 2), dtype=np.float64)
+    grad_xy[:] = np.nan
+    for i in range(n_cells):
+        nbr_idx = tree.query_ball_point(cell_xy[i], r=radius)
+        if len(nbr_idx) < 6:
+            continue
+        nbr = np.asarray(nbr_idx, dtype=np.int64)
+        A = np.column_stack([
+            np.ones(nbr.size),
+            cell_xy[nbr, 0] - cell_xy[i, 0],
+            cell_xy[nbr, 1] - cell_xy[i, 1],
+        ])
+        b = cell_z[nbr]
+        try:
+            coef, *_ = np.linalg.lstsq(A, b, rcond=None)
+            grad_xy[i] = coef[1:3]
+        except np.linalg.LinAlgError:
+            pass
+
+    grad_xy = grad_xy[np.isfinite(grad_xy).all(axis=1)]
+    if grad_xy.shape[0] < 20:
+        return np.eye(2), np.array([1.0, 1.0])
+
+    # Robust covariance via median-centered outer product
     g_med = np.median(grad_xy, axis=0)
     centered = grad_xy - g_med
     cov = (centered.T @ centered) / max(centered.shape[0] - 1, 1)
-    # PCA: principal axes = eigenvectors; smaller eigenvalue == "low-gradient"
-    # axis (along strike).
     vals, vecs = np.linalg.eigh(cov + eps * np.eye(2))
-    # Sort descending so vecs[:, 0] is high-gradient (perpendicular-to-strike)
-    order = np.argsort(vals)[::-1]
-    vals = vals[order]
-    vecs = vecs[:, order]
+    # Descending: vecs[:, 0] = high-gradient (dip-perpendicular)
+    order_s = np.argsort(vals)[::-1]
+    vals = vals[order_s]
+    vecs = vecs[:, order_s]
 
-    # Length scales: inversely proportional to gradient magnitude in each axis
     sigma = 1.0 / np.sqrt(np.maximum(vals, eps))
-    sigma = sigma / sigma.min()    # normalize: short axis = 1
-
-    # We want the rotation matrix R such that R.T (xy - center) gives
-    # coordinates in the (high-gradient, along-strike) frame.
+    sigma = sigma / sigma.min()
     R = vecs
     return R, sigma
 
@@ -174,16 +200,26 @@ class AnisoFormationKNN:
         # so kernel argument is O(1) at typical neighbor distance.
         L_pre = R @ np.diag(1.0 / sigma)
         xy_pre = xy @ L_pre
-        # Estimate the characteristic INTER-CLUSTER (between-track / between-
-        # well) length scale, not intra-well row spacing. We do this by
-        # subsampling sparsely (so within-well dense rows can't dominate)
-        # and taking the median 1-NN distance in that thinned point set.
-        rng = np.random.default_rng(20260507)
-        n_sub = min(2_000, xy.shape[0])
-        idx_sub = rng.choice(xy.shape[0], n_sub, replace=False)
-        tree_thin = cKDTree(xy_pre[idx_sub])
-        d_thin, _ = tree_thin.query(xy_pre[idx_sub], k=2)
-        L_norm = float(np.median(d_thin[:, 1]))
+
+        # Set L_norm to the inter-well length scale, NOT the intra-well row
+        # spacing. Each well has thousands of dense rows along its track,
+        # so "median NN over all rows" is misleadingly small. The relevant
+        # scale for held-out queries is the median distance from one well
+        # CENTROID to its nearest other well centroid in the rotated frame.
+        # This is on the order of typical well spacing.
+        unique_wids = np.unique(well_ids)
+        if len(unique_wids) >= 4:
+            centroids = np.array([
+                xy_pre[well_ids == wid].mean(axis=0) for wid in unique_wids
+            ])
+            tree_c = cKDTree(centroids)
+            d_c, _ = tree_c.query(centroids, k=2)
+            L_norm = float(np.median(d_c[:, 1]))
+        else:
+            bbox_min = xy_pre.min(axis=0)
+            bbox_max = xy_pre.max(axis=0)
+            bbox_span = float(np.maximum(bbox_max - bbox_min, 1.0).mean())
+            L_norm = bbox_span / 30.0
         L_norm = max(L_norm, 1e-9)
 
         # Final whitening: rotate, anisotropy-scale, then divide by overall
