@@ -503,6 +503,7 @@ def build_hidden_features(
     row_imputer: RowKNN,
     mlp_imputer: "MLPAnccImputer | None" = None,
     aniso_imputer: "AnisoFormationImputer | None" = None,
+    pf_results: dict | None = None,
     primary_formation: str = "ANCC",
     formations: tuple[str, ...] = FORMATIONS,
     enable_beam: bool = True,
@@ -838,6 +839,95 @@ def build_hidden_features(
                 aniso_preds_post[:, f_idx_primary] - mlp_preds_post[:, f_idx_primary]
             ).astype(np.float32)
 
+    # ------------------------------------------------------------------
+    # v12: Triple-Signal particle filter features (optional).
+    # `pf_results` is a dict[wid -> {pf_z_pred, pf_z_std, pf_ancc_pred,
+    # pf_ancc_std}] produced by triple_signal_pf.run_pfs_for_wells. Each
+    # array has length = N_eval_rows (the hidden segment).
+    #
+    # Per the public top notebook (LB 11.284): the ANCC-PF (S=TVT+Z) is
+    # the primary PF signal; Z-velocity TVT-PF is the fallback.
+    # ------------------------------------------------------------------
+    if pf_results is not None and wid in pf_results:
+        pf = pf_results[wid]
+        pf_z_pred = np.asarray(pf.get("pf_z_pred", []), dtype=np.float64)
+        pf_z_std = np.asarray(pf.get("pf_z_std", []), dtype=np.float64)
+        pf_ancc_pred = np.asarray(pf.get("pf_ancc_pred", []), dtype=np.float64)
+        pf_ancc_std = np.asarray(pf.get("pf_ancc_std", []), dtype=np.float64)
+
+        # Pick the primary PF (ANCC if available + finite, else Z-vel).
+        if (pf_ancc_pred.size == len(hidden)
+                and np.isfinite(pf_ancc_pred).all()):
+            pf_pred = pf_ancc_pred
+            pf_std = pf_ancc_std
+            pf_source = "ancc"
+        elif (pf_z_pred.size == len(hidden)
+                and np.isfinite(pf_z_pred).all()):
+            pf_pred = pf_z_pred
+            pf_std = pf_z_std
+            pf_source = "zvel"
+        else:
+            pf_pred = np.full(len(hidden), last_known_tvt, dtype=np.float64)
+            pf_std = np.full(len(hidden), 1.0, dtype=np.float64)
+            pf_source = "fallback"
+
+        fd["pf_pred"] = pf_pred.astype(np.float32)
+        fd["pf_std"] = pf_std.astype(np.float32)
+        fd["pf_delta"] = (pf_pred - last_known_tvt).astype(np.float32)
+        # Std trend / ratio relative to first-row PF std (gauges drift)
+        s0 = float(pf_std[0]) if pf_std.size else 1.0
+        s0_safe = max(s0, 0.01)
+        fd["pf_std_trend"] = (pf_std - s0).astype(np.float32)
+        fd["pf_std_ratio"] = (pf_std / s0_safe).astype(np.float32)
+
+        # Both PFs as separate features (the GBM can use Z-vel even when
+        # ANCC is the primary)
+        if pf_z_pred.size == len(hidden):
+            fd["pf_z_pred"] = pf_z_pred.astype(np.float32)
+            fd["pf_z_std"] = pf_z_std.astype(np.float32)
+            fd["pf_z_delta"] = (pf_z_pred - last_known_tvt).astype(np.float32)
+        if pf_ancc_pred.size == len(hidden):
+            fd["pf_ancc_pred"] = pf_ancc_pred.astype(np.float32)
+            fd["pf_ancc_std"] = pf_ancc_std.astype(np.float32)
+            fd["pf_ancc_delta"] = (pf_ancc_pred - last_known_tvt).astype(np.float32)
+
+        # Cross-comparisons with other spatial signals
+        fd["pf_vs_row_primary_diff"] = (pf_pred - tvt_formula_row_primary).astype(np.float32)
+        fd["pf_vs_row_primary_abs"] = np.abs(pf_pred - tvt_formula_row_primary).astype(np.float32)
+        fd["pf_vs_plane_primary_diff"] = (pf_pred - tvt_formula_plane_primary).astype(np.float32)
+        if mlp_imputer is not None:
+            fd["pf_vs_mlp_primary_diff"] = (pf_pred - tvt_formula_mlp_primary).astype(np.float32)
+
+        # Typewell GR at predicted TVT (signal: how plausible is the PF
+        # prediction given the typewell's GR profile?)
+        tw_gr_at_pf = np.interp(pf_pred, tw_tvt, tw_gr,
+                                left=tw_gr[0], right=tw_gr[-1])
+        fd["tw_gr_at_pf"] = tw_gr_at_pf.astype(np.float32)
+        fd["gr_minus_tw_at_pf"] = (
+            hidden_gr_filled - tw_gr_at_pf
+        ).astype(np.float32)
+        for offset in [-60, 60]:
+            tw_off = np.interp(pf_pred + offset, tw_tvt, tw_gr,
+                               left=tw_gr[0], right=tw_gr[-1])
+            fd[f"gr_tw_off_{offset}"] = (
+                hidden_gr_filled - tw_off
+            ).astype(np.float32)
+
+        # Slope-based baseline cross-check
+        if "prefix_tvt_md_slope100" in fd:
+            slope_recent = float(fd["prefix_tvt_md_slope100"])
+            md_eval = hidden["MD"].to_numpy(dtype=np.float64)
+            md_anchor = float(last_known["MD"])
+            baseline = last_known_tvt + slope_recent * (md_eval - md_anchor)
+            fd["pf_minus_slope"] = (pf_pred - baseline).astype(np.float32)
+            fd["spatial_minus_slope"] = (
+                tvt_formula_row_primary - baseline
+            ).astype(np.float32)
+            if mlp_imputer is not None:
+                fd["mlp_minus_slope"] = (
+                    tvt_formula_mlp_primary - baseline
+                ).astype(np.float32)
+
     if is_train:
         fd["target"] = (hidden["TVT"].to_numpy(dtype=np.float32)
                         - np.float32(last_known_tvt)).astype(np.float32)
@@ -855,6 +945,7 @@ def build_dataset(
     is_train: bool,
     mlp_imputer: "MLPAnccImputer | None" = None,
     aniso_imputer: "AnisoFormationImputer | None" = None,
+    pf_results: dict | None = None,
     primary_formation: str = "ANCC",
     formations: tuple[str, ...] = FORMATIONS,
     enable_beam: bool = True,
@@ -878,6 +969,7 @@ def build_dataset(
             row_imputer=row_imputer,
             mlp_imputer=mlp_imputer,
             aniso_imputer=aniso_imputer,
+            pf_results=pf_results,
             primary_formation=primary_formation,
             formations=formations,
             enable_beam=enable_beam,

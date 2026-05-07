@@ -7,6 +7,8 @@ __pycache__/
 
 # Build artifacts
 rogii/rust/local_score/target/
+rogii/rust/rogii_pf/target/
+rogii/rust/*/target/
 rogii/bench/search_runs.jsonl
 
 # Competition data (2GB; not suitable for git)
