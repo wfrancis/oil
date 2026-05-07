@@ -141,6 +141,69 @@ class MLPAnccImputer:
 
 
 # ---------------------------------------------------------------------------
+# Anisotropic-kriging imputer (v11 lever)
+# ---------------------------------------------------------------------------
+
+class AnisoFormationImputer:
+    """Wraps a per-formation anisotropic-kriging predictor with the same
+    ``impute(xy) -> (M, F), (M, F) stds, (M,) min_dist`` API as RowKNN.
+
+    Agent benchmark on the full 765-well 5-fold OOF found
+    ``aniso_exponential`` (K=20, range_scale=1.0, sigma_ratio=3) beats
+    konbu17's row-level KNN on ANCC pool RMSE (23.29 vs 30.74) and TVT
+    median (10.87 vs 12.30 ft). MLP+PE-L8 still wins on TVT max-well
+    RMSE (165.66 vs 275.54), so v11 keeps both spatial layers and
+    lets the GBM gate.
+    """
+
+    def __init__(self, predictors: dict, formations: tuple[str, ...] = FORMATIONS,
+                 kernel: str = "exponential", k: int = 20):
+        self.predictors = predictors
+        self.formations = tuple(formations)
+        self.kernel = kernel
+        self.k = k
+
+    @classmethod
+    def fit(
+        cls,
+        train_paths,
+        *,
+        formations: tuple[str, ...] = FORMATIONS,
+        exclude_wids: set[str] | None = None,
+        kernel: str = "exponential",
+        range_scale: float = 1.0,
+        k: int = 20,
+    ) -> "AnisoFormationImputer":
+        from aniso_kriging import fit_aniso_for_formations
+
+        if exclude_wids:
+            train_paths = [p for p in train_paths
+                           if p.stem.replace("__horizontal_well", "") not in exclude_wids]
+        predictors = fit_aniso_for_formations(
+            train_paths, formations=tuple(formations), range_scale=range_scale,
+        )
+        return cls(predictors, formations=tuple(formations),
+                   kernel=kernel, k=k)
+
+    def impute(self, xy_q: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Returns (preds (M, F), stds (M, F), min_dist (M,))."""
+        n = xy_q.shape[0]
+        preds = np.full((n, len(self.formations)), np.nan, dtype=np.float64)
+        stds = np.full((n, len(self.formations)), np.nan, dtype=np.float64)
+        min_dist = np.full(n, np.inf, dtype=np.float64)
+        for j, fname in enumerate(self.formations):
+            p = self.predictors.get(fname)
+            if p is None:
+                continue
+            m, s, d = p.query(xy_q, k=self.k, kernel=self.kernel)
+            preds[:, j] = m
+            stds[:, j] = s
+            # Use the smallest formation min_dist as the imputer's min_dist
+            min_dist = np.minimum(min_dist, d)
+        return preds, stds, min_dist
+
+
+# ---------------------------------------------------------------------------
 # Robust statistics
 # ---------------------------------------------------------------------------
 
@@ -439,6 +502,7 @@ def build_hidden_features(
     formation_imputer: FormationPlaneKNN,
     row_imputer: RowKNN,
     mlp_imputer: "MLPAnccImputer | None" = None,
+    aniso_imputer: "AnisoFormationImputer | None" = None,
     primary_formation: str = "ANCC",
     formations: tuple[str, ...] = FORMATIONS,
     enable_beam: bool = True,
@@ -728,6 +792,52 @@ def build_hidden_features(
             mlp_preds_post[:, f_idx_primary] - plane_post[:, f_idx_primary]
         ).astype(np.float32)
 
+    # ------------------------------------------------------------------
+    # v11 Aniso-exponential kriging features (optional)
+    # Agent benchmark: aniso_exponential (K=20, range_scale=1.0,
+    # sigma_ratio=3) beats KNN on ANCC pool RMSE (23.29 vs 30.74) and
+    # TVT median (10.87 vs 12.30). MLP still owns max-well-RMSE so
+    # we keep BOTH spatial layers as features.
+    # ------------------------------------------------------------------
+    if aniso_imputer is not None:
+        aniso_preds_full, aniso_stds_full, aniso_min_dist_full = aniso_imputer.impute(xy_full)
+        aniso_preds_post = aniso_preds_full[mask_start:]
+        aniso_stds_post = aniso_stds_full[mask_start:]
+        aniso_min_dist_post = aniso_min_dist_full[mask_start:]
+        b_aniso_per_F: dict[str, float] = {}
+        b_aniso_huber_per_F: dict[str, float] = {}
+        for fi, fname in enumerate(formations):
+            per_row = known_tvt + known_z - aniso_preds_full[:mask_start, fi]
+            b_aniso_per_F[fname] = median_b(per_row)
+            b_aniso_huber_per_F[fname] = huber_b(per_row)
+        for fi, fname in enumerate(formations):
+            fd[f"aniso_{fname}"] = aniso_preds_post[:, fi].astype(np.float32)
+            fd[f"aniso_{fname}_dz"] = (z_post - aniso_preds_post[:, fi]).astype(np.float32)
+            fd[f"aniso_{fname}_std"] = aniso_stds_post[:, fi].astype(np.float32)
+            fd[f"aniso_b_{fname}"] = np.float32(b_aniso_per_F[fname])
+            fd[f"aniso_b_huber_{fname}"] = np.float32(b_aniso_huber_per_F[fname])
+            tvt_F_a = -z_post + aniso_preds_post[:, fi] + b_aniso_per_F[fname]
+            fd[f"aniso_tvt_formula_{fname}"] = (
+                tvt_F_a - np.float32(last_known_tvt)
+            ).astype(np.float32)
+        tvt_formula_aniso_primary = (
+            -z_post + aniso_preds_post[:, f_idx_primary] + b_aniso_per_F[primary_formation]
+        )
+        fd["aniso_min_dist"] = aniso_min_dist_post.astype(np.float32)
+        fd["aniso_tvt_formula"] = (
+            tvt_formula_aniso_primary - np.float32(last_known_tvt)
+        ).astype(np.float32)
+        fd["aniso_vs_row_primary_diff"] = (
+            aniso_preds_post[:, f_idx_primary] - row_preds_post[:, f_idx_primary]
+        ).astype(np.float32)
+        fd["aniso_vs_row_primary_tvt_diff"] = (
+            tvt_formula_aniso_primary - tvt_formula_row_primary
+        ).astype(np.float32)
+        if mlp_imputer is not None:
+            fd["aniso_vs_mlp_primary_diff"] = (
+                aniso_preds_post[:, f_idx_primary] - mlp_preds_post[:, f_idx_primary]
+            ).astype(np.float32)
+
     if is_train:
         fd["target"] = (hidden["TVT"].to_numpy(dtype=np.float32)
                         - np.float32(last_known_tvt)).astype(np.float32)
@@ -744,6 +854,7 @@ def build_dataset(
     *,
     is_train: bool,
     mlp_imputer: "MLPAnccImputer | None" = None,
+    aniso_imputer: "AnisoFormationImputer | None" = None,
     primary_formation: str = "ANCC",
     formations: tuple[str, ...] = FORMATIONS,
     enable_beam: bool = True,
@@ -766,6 +877,7 @@ def build_dataset(
             formation_imputer=formation_imputer,
             row_imputer=row_imputer,
             mlp_imputer=mlp_imputer,
+            aniso_imputer=aniso_imputer,
             primary_formation=primary_formation,
             formations=formations,
             enable_beam=enable_beam,

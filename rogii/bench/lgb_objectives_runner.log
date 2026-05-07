@@ -36,3 +36,12 @@
 >> objective=huber
    fold 0: rmse=26.6226  best_iter=97  walltime=36.6s
    fold 1: rmse=20.7426  best_iter=2592  walltime=398.5s
+   fold 2: rmse=20.2999  best_iter=1045  walltime=229.7s
+   fold 3: rmse=28.0007  best_iter=544  walltime=116.9s
+   fold 4: rmse=18.3599  best_iter=388  walltime=86.4s
+   overall_rmse=23.0760  max_well_rmse=56.15  p90_well_rmse=42.09  mean_walltime/fold=173.6s
+
+>> objective=quantile_0.5
+   fold 0: rmse=26.9992  best_iter=1  walltime=20.6s
+   fold 1: rmse=22.5097  best_iter=235  walltime=59.7s
+   fold 2: rmse=20.7674  best_iter=50  walltime=31.1s
