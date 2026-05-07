@@ -1,0 +1,14 @@
+{
+  "id": "wbfranci/rogii-v12-formation-stack-triple-signal-pfs",
+  "title": "ROGII v12 — formation stack + Triple-Signal PFs",
+  "code_file": "submission.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": false,
+  "dataset_sources": [],
+  "competition_sources": ["rogii-wellbore-geology-prediction"],
+  "kernel_sources": []
+}
