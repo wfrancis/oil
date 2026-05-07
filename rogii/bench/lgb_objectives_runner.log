@@ -3,3 +3,7 @@
    plane fit: 198 wells in 5.8s
    row KNN fit: 1,319,081 rows in 4.9s
 >> Building train features (KNN + plane, no MLP, no beam) ...
+  train: 5/50
+  train: 10/50
+  train: 15/50
+  train: 20/50
