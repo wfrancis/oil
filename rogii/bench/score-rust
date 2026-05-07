@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BIN="$ROOT/rust/local_score/target/release/rogii-score"
+CRATE="$ROOT/rust/local_score"
+
+needs_build=0
+if [[ ! -x "$BIN" ]]; then
+  needs_build=1
+elif find "$CRATE" \
+  \( -path "$CRATE/target" -prune \) -o \
+  \( -name '*.rs' -o -name 'Cargo.toml' -o -name 'Cargo.lock' -o -path '*/.cargo/*' \) \
+  -newer "$BIN" -print -quit | grep -q .; then
+  needs_build=1
+fi
+
+if [[ "$needs_build" == 1 ]]; then
+  (cd "$CRATE" && cargo build --release) >/dev/null
+fi
+
+exec "$BIN" "$@"

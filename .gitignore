@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+*.pyo
+*.nbi
+*.nbc
+.DS_Store
+
+# Build artifacts
+rogii/rust/local_score/target/
+rogii/bench/search_runs.jsonl
+
+# Competition data (2GB; not suitable for git)
+rogii/data/competition/
+
+# Trained model artifacts (rebuildable; keep out of git for portability)
+rogii/data/geology_clf.joblib
+
+# Per-machine state
+rogii/bench/submit_guard_state.json
