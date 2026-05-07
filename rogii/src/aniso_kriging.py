@@ -125,6 +125,14 @@ class AnisoFormationKNN:
     """Anisotropic local kriging predictor for one formation top.
 
     Build once on all train rows; query per test row.
+
+    Notes
+    -----
+    The whitening matrix L = R @ diag(1 / (sigma * range_scale * L_norm)).
+    L_norm is an overall length scale (median nearest-neighbor distance in
+    raw whitened space) that ensures the kernel argument is O(1) at typical
+    inter-row distances. range_scale further tightens (<1) or loosens (>1)
+    the kernel decay.
     """
 
     xy: np.ndarray              # (N, 2) original coords
@@ -133,7 +141,8 @@ class AnisoFormationKNN:
     well_index: list[str]
     R: np.ndarray               # (2, 2) rotation
     sigma: np.ndarray           # (2,) length scales
-    L: np.ndarray               # (2, 2) whitening = R / sigma (per axis)
+    L: np.ndarray               # (2, 2) whitening = R / (sigma * range_scale * L_norm)
+    L_norm: float               # overall length scale
     tree: cKDTree
     nugget: float
     range_scale: float          # multiplier for sigma -> kriging length
@@ -160,13 +169,29 @@ class AnisoFormationKNN:
             R, sigma = estimate_anisotropy_from_field(xy, z)
         else:
             R, sigma = anisotropy
-        # Whitening: project onto axes, scale each by 1/sigma so that the
-        # kdtree's Euclidean distance corresponds to anisotropic Mahalanobis.
-        L = R @ np.diag(1.0 / (sigma * range_scale))
+
+        # First-pass whitening (just rotation + sigma): used to learn L_norm
+        # so kernel argument is O(1) at typical neighbor distance.
+        L_pre = R @ np.diag(1.0 / sigma)
+        xy_pre = xy @ L_pre
+        # Subsample to estimate median NN distance cheaply
+        n_sub = min(20_000, xy.shape[0])
+        rng = np.random.default_rng(20260507)
+        idx_sub = rng.choice(xy.shape[0], n_sub, replace=False)
+        tree_pre = cKDTree(xy_pre)
+        d_pre, _ = tree_pre.query(xy_pre[idx_sub], k=2)
+        # Use median 1-NN distance as the global scale.
+        L_norm = float(np.median(d_pre[:, 1]))
+        L_norm = max(L_norm, 1e-9)
+
+        # Final whitening: rotate, anisotropy-scale, then divide by overall
+        # length scale * range_scale.
+        # L = L_pre / (L_norm * range_scale) so kernel arg ~1 near typical NN.
+        L = L_pre / (L_norm * range_scale)
         xy_white = xy @ L
         tree = cKDTree(xy_white)
         return cls(xy=xy, z=z, well_ids=well_ids, well_index=well_index,
-                   R=R, sigma=sigma, L=L, tree=tree,
+                   R=R, sigma=sigma, L=L, L_norm=L_norm, tree=tree,
                    nugget=nugget, range_scale=range_scale)
 
     def query(
@@ -174,64 +199,73 @@ class AnisoFormationKNN:
         xy_q: np.ndarray,
         *,
         k: int = 20,
-        n_q: int = 4_000,
-        exclude_well: str | None = None,
         kernel: str = "gaussian",   # "gaussian" | "exponential"
+        batch_size: int = 200_000,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Returns (mean_pred, std_pred, min_dist)."""
-        excl_int = self.well_to_int(exclude_well) if exclude_well else -2
-        q_white = xy_q @ self.L
-        n_q = min(n_q, self.xy.shape[0])
-        dist, idx = self.tree.query(q_white, k=n_q, workers=-1)
-        if exclude_well:
-            mask_self = self.well_ids[idx] == excl_int
-            dist = np.where(mask_self, np.inf, dist)
+        """Returns (mean_pred, std_pred, min_dist).
 
-        order = np.argpartition(dist, kth=min(k - 1, n_q - 1), axis=1)[:, :k]
-        d_k = np.take_along_axis(dist, order, axis=1)
-        idx_k = np.take_along_axis(idx, order, axis=1)
-        valid_k = np.isfinite(d_k)
-
-        if kernel == "gaussian":
-            cov = np.where(valid_k, np.exp(-0.5 * d_k * d_k), 0.0)
-        elif kernel == "exponential":
-            cov = np.where(valid_k, np.exp(-d_k), 0.0)
-        else:
+        Self-well exclusion is intentionally NOT done here. For benchmark/
+        OOF use, the caller is expected to have built this object with only
+        the train-fold rows, so leakage is impossible by construction.
+        """
+        if kernel not in ("gaussian", "exponential"):
             raise ValueError(f"unknown kernel {kernel!r}")
+        n = xy_q.shape[0]
+        means = np.full(n, np.nan, dtype=np.float64)
+        stds = np.full(n, np.nan, dtype=np.float64)
+        min_dist = np.full(n, np.inf, dtype=np.float64)
 
-        means = np.full(xy_q.shape[0], np.nan, dtype=np.float64)
-        stds = np.full(xy_q.shape[0], np.nan, dtype=np.float64)
-        min_dist = np.where(valid_k, d_k, np.inf).min(axis=1)
+        for start in range(0, n, batch_size):
+            stop = min(start + batch_size, n)
+            xy_b = xy_q[start:stop]
+            q_white = xy_b @ self.L
+            d_k, idx_k = self.tree.tree.query(q_white, k=k, workers=-1) \
+                if False else self.tree.query(q_white, k=k, workers=-1)
+            # cKDTree returns (B,) arrays for k=1; ensure 2-D.
+            if d_k.ndim == 1:
+                d_k = d_k[:, None]
+                idx_k = idx_k[:, None]
+            valid_k = np.isfinite(d_k)
+            min_dist[start:stop] = np.where(valid_k, d_k, np.inf).min(axis=1)
 
-        for i in range(xy_q.shape[0]):
-            ix_i = idx_k[i][valid_k[i]]
-            if ix_i.size < 3:
-                continue
-            d_i = d_k[i][valid_k[i]]
-            c_i = cov[i][valid_k[i]]
-            # Build the kriging system on neighbors with their pairwise distance.
-            # We compute the neighbor-neighbor whitened distance from raw coords
-            # via the same L matrix.
-            xy_n = self.xy[ix_i] @ self.L
-            diffs = xy_n[:, None, :] - xy_n[None, :, :]
+            if kernel == "gaussian":
+                c_i = np.where(valid_k, np.exp(-0.5 * d_k * d_k), 0.0)
+            else:
+                c_i = np.where(valid_k, np.exp(-d_k), 0.0)
+
+            # Batched kriging system. Build (B, K, K) Gram matrix from neighbor
+            # whitened coords. self.xy is raw, so whitening must be applied.
+            xy_n = self.xy[idx_k] @ self.L                # (B, K, 2)
+            diffs = xy_n[:, :, None, :] - xy_n[:, None, :, :]  # (B, K, K, 2)
             dn = np.sqrt(np.sum(diffs * diffs, axis=-1))
             if kernel == "gaussian":
-                K = np.exp(-0.5 * dn * dn)
+                K_mat = np.exp(-0.5 * dn * dn)
             else:
-                K = np.exp(-dn)
-            K = K + self.nugget * np.eye(K.shape[0])
+                K_mat = np.exp(-dn)
+            K_mat = K_mat + self.nugget * np.eye(k)[None, :, :]
+
+            # Solve K_mat[i] @ w[i] = c_i[i]  (B systems of size K)
             try:
-                w = np.linalg.solve(K, c_i)
+                w = np.linalg.solve(K_mat, c_i[..., None]).squeeze(-1)
             except np.linalg.LinAlgError:
-                w = c_i / max(c_i.sum(), 1e-12)
-            wsum = w.sum()
-            if abs(wsum) < 1e-12:
-                continue
-            mean = float((self.z[ix_i] * w).sum() / wsum)
-            # Ordinary-kriging variance approximation:
-            var = max(1.0 - float((c_i * w).sum()), 0.0)
-            means[i] = mean
-            stds[i] = np.sqrt(var)
+                # Fallback: row-normalize covariance.
+                row_sum = c_i.sum(axis=1, keepdims=True)
+                row_sum = np.where(row_sum < 1e-12, 1.0, row_sum)
+                w = c_i / row_sum
+
+            wsum = w.sum(axis=1)
+            wsum_safe = np.where(np.abs(wsum) < 1e-12, 1.0, wsum)
+            z_n = self.z[idx_k]                              # (B, K)
+            means_b = (z_n * w).sum(axis=1) / wsum_safe
+            # Variance: 1 - c.T @ w  (clipped)
+            var_b = np.clip(1.0 - (c_i * w).sum(axis=1), 0.0, None)
+            std_b = np.sqrt(var_b)
+
+            bad = (np.abs(wsum) < 1e-12) | (~np.any(valid_k, axis=1))
+            means_b = np.where(bad, np.nan, means_b)
+            std_b = np.where(bad, np.nan, std_b)
+            means[start:stop] = means_b
+            stds[start:stop] = std_b
 
         return means, stds, min_dist
 
