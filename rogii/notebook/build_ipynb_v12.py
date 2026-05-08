@@ -158,6 +158,12 @@ ANISO_RANGE_SCALE = 1.0
 PF_N_PARTICLES = 500
 PF_SEED = 42
 
+# v12 v3: disable XGB to avoid OOM. With 226 features x 3.78M rows
+# (~3.4 GB float32 train matrix), XGB's DMatrix copy plus its internal
+# allocations push us past Kaggle's 15 GB memory limit. v9 OOF showed
+# XGB only earned 9.9% Ridge weight anyway -- minimal loss to drop it.
+DISABLE_XGB = True
+
 OUTPUT = Path("/kaggle/working/submission.csv")
 OOF_OUT = Path("/kaggle/working/oof.csv")
 
@@ -353,10 +359,12 @@ for seed in LGB_SEEDS:
     oof, tp, score = train_lgb(seed)
     results[f"lgb_{{seed}}"] = {{"oof": oof, "test": tp, "rmse": score}}
 
-if HAS_XGB:
+if HAS_XGB and not DISABLE_XGB:
     oof_xgb, test_xgb, rmse_xgb = train_xgb(42)
     if oof_xgb is not None:
         results["xgb_42"] = {{"oof": oof_xgb, "test": test_xgb, "rmse": rmse_xgb}}
+elif DISABLE_XGB:
+    logger.info("XGB disabled (DISABLE_XGB=True) to avoid OOM with v12's 226-feature matrix")
 
 # 10) Ensemble
 oof_avg = np.mean([r["oof"] for r in results.values()], axis=0)
